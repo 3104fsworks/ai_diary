@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models/ai_personality.dart';
 import '../data/models/goal_item.dart';
+import '../data/models/radio_voice_personality.dart';
 import 'theme/app_colors.dart';
 
 /// App-wide UI settings — persisted via SharedPreferences.
@@ -30,6 +31,14 @@ class AppSettings extends ChangeNotifier {
   static const _kLifetimeFree = 'lifetime_free';
   static const _kPremiumUntil = 'premium_until_iso';
   static const _kRedeemedCode = 'redeemed_code';
+  static const _kOpenAiApiKey = 'openai_api_key';
+  static const _kRadioVoiceType = 'radio_voice_type';
+  static const _kRadioVoiceGender = 'radio_voice_gender';
+  static const _kRadioNotificationsEnabled = 'radio_notifications_enabled';
+  static const _kDiaryReminderEnabled = 'diary_reminder_enabled';
+  static const _kDiaryReminderHour = 'diary_reminder_hour';
+  static const _kProxyBaseUrl = 'proxy_base_url';
+  static const _kAppProxyToken = 'app_proxy_token';
 
   final SharedPreferences _prefs;
 
@@ -170,6 +179,19 @@ class AppSettings extends ChangeNotifier {
   /// Gemini API key — empty string when not configured.
   String get geminiApiKey => _prefs.getString(_kGeminiApiKey) ?? '';
 
+  /// OpenAI API key — used by [WhisperTranscriptionService] for voice-to-text.
+  /// Empty string when not configured; the recording screen will prompt the
+  /// user to set it before allowing recording.
+  String get openAiApiKey => _prefs.getString(_kOpenAiApiKey) ?? '';
+
+  /// Masks all but the last 4 chars: "sk-p••••••••aB3z".
+  String get openAiApiKeyMasked {
+    final k = openAiApiKey;
+    if (k.isEmpty) return '';
+    if (k.length <= 8) return '•' * k.length;
+    return '${k.substring(0, 4)}${'•' * (k.length - 8)}${k.substring(k.length - 4)}';
+  }
+
   /// Masks all but the last 4 chars: "AIza••••••••aB3z".
   String get geminiApiKeyMasked {
     final k = geminiApiKey;
@@ -289,6 +311,93 @@ class AppSettings extends ChangeNotifier {
       await _prefs.remove(_kGeminiApiKey);
     } else {
       await _prefs.setString(_kGeminiApiKey, trimmed);
+    }
+    notifyListeners();
+  }
+
+  // ── Radio voice settings ─────────────────────────────────────────────
+
+  RadioVoiceType get radioVoiceType =>
+      RadioVoiceTypeLabel.fromStorage(_prefs.getString(_kRadioVoiceType));
+
+  RadioVoiceGender get radioVoiceGender =>
+      RadioVoiceGenderLabel.fromStorage(_prefs.getString(_kRadioVoiceGender));
+
+  bool get radioNotificationsEnabled =>
+      _prefs.getBool(_kRadioNotificationsEnabled) ?? true;
+
+  /// Whether the daily diary-reminder notification is active.
+  /// Defaults to false — user must opt in (onboarding or settings).
+  bool get diaryReminderEnabled =>
+      _prefs.getBool(_kDiaryReminderEnabled) ?? false;
+
+  /// Hour (0-23) at which the daily diary-reminder fires. Default 21.
+  int get diaryReminderHour =>
+      _prefs.getInt(_kDiaryReminderHour) ?? 21;
+
+  // ── Proxy settings ───────────────────────────────────────────────────────
+
+  /// Base URL of the Cloudflare Workers proxy (no trailing slash).
+  /// Empty string = direct API calls (beta mode).
+  /// Example: https://ai-diary-proxy.you.workers.dev
+  String get proxyBaseUrl => _prefs.getString(_kProxyBaseUrl) ?? '';
+
+  /// Shared secret sent as X-App-Token when the proxy has APP_TOKEN set.
+  /// Empty string = no token header is sent.
+  String get appProxyToken => _prefs.getString(_kAppProxyToken) ?? '';
+
+  Future<void> setRadioVoiceType(RadioVoiceType type) async {
+    await _prefs.setString(_kRadioVoiceType, type.storageKey);
+    notifyListeners();
+  }
+
+  Future<void> setRadioVoiceGender(RadioVoiceGender gender) async {
+    await _prefs.setString(_kRadioVoiceGender, gender.storageKey);
+    notifyListeners();
+  }
+
+  Future<void> setRadioNotificationsEnabled(bool on) async {
+    await _prefs.setBool(_kRadioNotificationsEnabled, on);
+    notifyListeners();
+  }
+
+  Future<void> setDiaryReminderEnabled(bool on) async {
+    await _prefs.setBool(_kDiaryReminderEnabled, on);
+    notifyListeners();
+  }
+
+  Future<void> setDiaryReminderHour(int hour) async {
+    await _prefs.setInt(_kDiaryReminderHour, hour.clamp(0, 23));
+    notifyListeners();
+  }
+
+  /// Sets the proxy base URL, stripping any trailing slash.
+  Future<void> setProxyBaseUrl(String url) async {
+    final trimmed = url.trim().replaceAll(RegExp(r'/+$'), '');
+    if (trimmed.isEmpty) {
+      await _prefs.remove(_kProxyBaseUrl);
+    } else {
+      await _prefs.setString(_kProxyBaseUrl, trimmed);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setAppProxyToken(String token) async {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) {
+      await _prefs.remove(_kAppProxyToken);
+    } else {
+      await _prefs.setString(_kAppProxyToken, trimmed);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setOpenAiApiKey(String key) async {
+    final trimmed = key.trim();
+    if (trimmed.isEmpty) {
+      await _prefs.remove(_kOpenAiApiKey);
+    } else {
+      await _prefs.setString(_kOpenAiApiKey, trimmed);
     }
     notifyListeners();
   }

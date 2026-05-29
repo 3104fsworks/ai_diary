@@ -17,7 +17,11 @@ import '../../features/legal/terms_screen.dart';
 import '../../features/settings/faq_screen.dart';
 import '../../features/settings/goals_screen.dart';
 import '../../features/settings/plan_screen.dart';
+import '../../features/home/weekly_radio_screen.dart'
+    show WeeklyRadioScreen, RadioPlayerArgs;
+import '../../features/home/radio_player_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/settings/custom_settings_screen.dart';
 
 class AppRoutes {
   static const splash = '/splash';
@@ -37,6 +41,9 @@ class AppRoutes {
   static const goals = '/settings/goals';
   static const privacy = '/legal/privacy';
   static const terms = '/legal/terms';
+  static const weeklyRadio = '/weekly-radio';
+  static const radioPlayer = '/weekly-radio/player';
+  static const customSettings = '/settings/custom';
 }
 
 GoRouter buildRouter({
@@ -118,6 +125,24 @@ GoRouter buildRouter({
       GoRoute(
         path: AppRoutes.terms,
         builder: (_, _) => const TermsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.weeklyRadio,
+        builder: (_, _) => const WeeklyRadioScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.radioPlayer,
+        builder: (_, state) {
+          final args = state.extra as RadioPlayerArgs;
+          return RadioPlayerScreen(
+            episode: args.episode,
+            allEpisodes: args.all,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.customSettings,
+        builder: (_, _) => const CustomSettingsScreen(),
       ),
     ],
     errorBuilder: (_, state) => Scaffold(

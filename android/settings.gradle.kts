@@ -19,7 +19,10 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "9.0.1" apply false
+    // record_android 2.0.0 ships a buildscript block that declares AGP 9.2.1.
+    // If our version differs, Gradle loads two separate AGP classloaders and
+    // sourceSets API casts fail at config time. Pin to 9.2.1 to match.
+    id("com.android.application") version "9.2.1" apply false
     id("org.jetbrains.kotlin.android") version "2.3.20" apply false
     // Firebase: declares the version once here, applied in app/build.gradle.kts.
     id("com.google.gms.google-services") version "4.4.2" apply false

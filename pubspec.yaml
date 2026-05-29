@@ -2,7 +2,7 @@ name: ai_diary
 description: "AI Diary - a minimal AI-powered life log diary."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.0+10
 
 environment:
   sdk: ^3.12.0
@@ -20,7 +20,17 @@ dependencies:
   path_provider: ^2.1.5
   share_plus: ^10.1.2
   image_picker: ^1.1.2
-  speech_to_text: ^7.0.0
+  # record 5.x / 6.x pulled record_platform_interface 1.6.0 while record_linux
+  # stayed at 0.7.2 (which only implements ≤1.5.0). That mismatch caused a
+  # kernel_snapshot_program compile error even on Android builds because Flutter
+  # compiles ALL platform Dart files into the kernel snapshot.
+  # Fix: record 7.x uses record_platform_interface ^2.0.0, which is consistent
+  # with record_linux 2.0.0 and record_android 2.0.0.
+  record: ^7.0.0
+  audioplayers: ^6.0.0
+  purchases_flutter: ^8.0.0
+  flutter_local_notifications: ^18.0.0
+  timezone: ^0.9.4
   permission_handler: ^11.3.1
   http: ^1.2.2
   geolocator: ^13.0.2

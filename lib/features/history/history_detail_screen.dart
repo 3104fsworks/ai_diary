@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/service_locator.dart';
@@ -190,6 +191,15 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
                 editHint: l.diaryJournalEditHint,
                 onSave: _saveJournalEdit,
               ),
+              if (e.audioFilePath != null &&
+                  File(e.audioFilePath!).existsSync())
+                _VoicePlaybackTile(
+                  filePath: e.audioFilePath!,
+                  durationSeconds: e.audioDurationSeconds,
+                  playLabel: l.historyVoicePlay,
+                  playingLabel: l.historyVoicePlaying,
+                  pauseLabel: l.historyVoicePause,
+                ),
               if (e.rawVoiceMemo.isNotEmpty)
                 _RawVoiceCollapsible(
                   text: e.rawVoiceMemo,
@@ -516,6 +526,129 @@ class _RawVoiceCollapsibleState extends State<_RawVoiceCollapsible> {
             duration: const Duration(milliseconds: 220),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Compact audio playback bar shown in the history detail when a voice
+/// recording file exists on disk.
+class _VoicePlaybackTile extends StatefulWidget {
+  final String filePath;
+  final int? durationSeconds;
+  final String playLabel;
+  final String playingLabel;
+  final String pauseLabel;
+
+  const _VoicePlaybackTile({
+    required this.filePath,
+    required this.durationSeconds,
+    required this.playLabel,
+    required this.playingLabel,
+    required this.pauseLabel,
+  });
+
+  @override
+  State<_VoicePlaybackTile> createState() => _VoicePlaybackTileState();
+}
+
+class _VoicePlaybackTileState extends State<_VoicePlaybackTile> {
+  final _player = AudioPlayer();
+  PlayerState _state = PlayerState.stopped;
+  Duration _position = Duration.zero;
+  Duration _total = Duration.zero;
+  StreamSubscription<PlayerState>? _stateSub;
+  StreamSubscription<Duration>? _posSub;
+  StreamSubscription<Duration>? _durSub;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.durationSeconds != null) {
+      _total = Duration(seconds: widget.durationSeconds!);
+    }
+    _stateSub = _player.onPlayerStateChanged.listen((s) {
+      if (mounted) setState(() => _state = s);
+    });
+    _posSub = _player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _position = p);
+    });
+    _durSub = _player.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _total = d);
+    });
+  }
+
+  @override
+  void dispose() {
+    _stateSub?.cancel();
+    _posSub?.cancel();
+    _durSub?.cancel();
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_state == PlayerState.playing) {
+      await _player.pause();
+    } else {
+      await _player.play(DeviceFileSource(widget.filePath));
+    }
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isPlaying = _state == PlayerState.playing;
+    final progress = _total.inMilliseconds > 0
+        ? (_position.inMilliseconds / _total.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: _toggle,
+              icon: Icon(
+                isPlaying ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                size: 32,
+              ),
+              tooltip: isPlaying ? widget.pauseLabel : widget.playLabel,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 3,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${_fmt(_position)} / ${_fmt(_total)}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

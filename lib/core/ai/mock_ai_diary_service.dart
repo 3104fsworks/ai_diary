@@ -4,7 +4,12 @@ import 'ai_diary_service.dart';
 
 /// Canned output that demonstrates the personality switch + emotion sync
 /// before a real provider is wired up.
+///
+/// DEBUG: every output is tagged with "[MOCK]" so beta testers can tell
+/// at a glance whether the live Gemini path is firing. Remove the tag
+/// (and the prefix below) once the shared API key is stable in production.
 class MockAiDiaryService implements AiDiaryService {
+  static const _debugTag = '[MOCK] ';
   @override
   Future<AiGenerationResult> generateDiary({
     required DiaryEntry entry,
@@ -23,11 +28,14 @@ class MockAiDiaryService implements AiDiaryService {
     // Heavy days override personality brightness (matches the system prompt rule).
     if (mood == _Mood.low) {
       return AiGenerationResult(
-        journal: ja
+        journal: '$_debugTag${ja
             ? '静かな1日だった。多くは書かない。書けることだけ、そっと残しておく。'
-            : 'A quiet day. Not much to say. Leaving only what wants to stay.',
-        feedback: ja ? '今日は、それで充分。' : 'Today, that is enough.',
-        titleSuggestion: ja ? '静かな1日' : 'Quiet',
+            : 'A quiet day. Not much to say. Leaving only what wants to stay.'}',
+        feedback: '$_debugTag${ja ? '今日は、それで充分。' : 'Today, that is enough.'}',
+        titleSuggestion: '$_debugTag${ja ? '静かな1日' : 'Quiet'}',
+        journalEn: '${_debugTag}A quiet day with little to say. Only the essential remains.',
+        feedbackEn: '${_debugTag}Today, that is enough.',
+        radioIndex: '$_debugTag- **Core Action:** Spent a quiet day resting and reflecting. Low activity overall.\n- **AI Sentiment:** Low energy, calm withdrawal',
       );
     }
 
@@ -53,10 +61,27 @@ class MockAiDiaryService implements AiDiaryService {
         ja ? 'がんばったね、ゆっくり休んでね。' : "You did so well — rest up tonight.",
     };
 
+    final journalEn = switch (personality) {
+      AiPersonality.standard =>
+        'Spent a calm day navigating a Shibuya meeting in the afternoon and unwinding at a cafe with a book in the evening. Steps were on track.',
+      AiPersonality.mirroring =>
+        'Day wrapped up somehow. The meeting moved along okay and cooked dinner at home. Not bad.',
+      AiPersonality.friendly =>
+        'Had a great day! Showed up for the afternoon meeting and even cooked dinner — really taking care of yourself.',
+    };
+
+    const feedbackEn = 'You moved well today — good on you.';
+    const radioIndex =
+        '- **Core Action:** Attended afternoon meeting in Shibuya and relaxed at a cafe with a book. Steps goal met.\n'
+        '- **AI Sentiment:** Steady calm, mild satisfaction';
+
     return AiGenerationResult(
-      journal: journal,
-      feedback: feedback,
-      titleSuggestion: ja ? '静かな1日' : 'A quiet day',
+      journal: '$_debugTag$journal',
+      feedback: '$_debugTag$feedback',
+      titleSuggestion: '$_debugTag${ja ? '静かな1日' : 'A quiet day'}',
+      journalEn: '$_debugTag$journalEn',
+      feedbackEn: '$_debugTag$feedbackEn',
+      radioIndex: '$_debugTag$radioIndex',
     );
   }
 

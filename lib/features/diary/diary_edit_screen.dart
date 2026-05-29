@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,18 +7,21 @@ import '../../app/app_settings.dart';
 import '../../app/router/app_router.dart';
 import '../../app/service_locator.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/ai/ai_diary_service.dart';
 import '../../core/ai/routing_ai_diary_service.dart';
 import '../../core/export/sns_image_exporter.dart';
 import '../../core/health/health_service.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/models/diary_entry.dart';
 import '../../data/models/goal_item.dart';
+import '../../data/models/voice_metadata.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../widgets/section_label.dart';
 import 'voice_recording_screen.dart';
 import 'widgets/goal_grid.dart';
 import 'widgets/particle_orb.dart';
 import 'widgets/sns_image_card.dart';
+import '../../core/notifications/time_capsule_service.dart';
 import 'widgets/voice_tooltip.dart';
 
 class DiaryEditScreen extends StatefulWidget {
@@ -29,12 +33,25 @@ class DiaryEditScreen extends StatefulWidget {
 
 class _DiaryEditScreenState extends State<DiaryEditScreen> {
   final _textController = TextEditingController();
+
+  /// Editable controller for the "ありのままのつぶやき" section.
+  /// Pre-filled from voice transcripts; user can also type here directly.
+  /// Saved verbatim as [DiaryEntry.rawVoiceMemo] — never AI-rewritten.
+  final _rawVoiceController = TextEditingController();
+
   final _snsKey = GlobalKey();
   final _imagePicker = ImagePicker();
 
-  String _rawVoiceMemo = '';
   List<String> _photoPaths = [];
   bool _saving = false;
+
+  /// Local path to the audio file produced by the last recording session.
+  /// Stored in the diary entry so history can offer playback.
+  String? _audioFilePath;
+
+  /// Voice characteristics of the latest recording.
+  /// Stored in the diary entry for weekly AI radio BGM selection.
+  VoiceMetadata? _voiceMetadata;
   bool _showVoiceTooltip = false;
   bool _goalsLoaded = false;
   List<GoalItem> _goals = [];
@@ -47,6 +64,11 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
   bool _timelineLoaded = false;
   HealthSnapshot? _health;
   bool _healthLoaded = false;
+
+  /// Set after _summariseIntoTextField finishes. Holds the AI-polished
+  /// version so we don't pay for a second AI call at save time.
+  AiGenerationResult? _aiPreview;
+  bool _summarising = false;
 
 
   @override
@@ -105,6 +127,7 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
   @override
   void dispose() {
     _textController.dispose();
+    _rawVoiceController.dispose();
     super.dispose();
   }
 
@@ -119,14 +142,107 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
         builder: (_) => const VoiceRecordingScreen(),
       ),
     );
-    if (result == null || result.transcript.isEmpty) return;
+    if (result == null) return;
+
+    // Always capture audio metadata — even when transcription failed the audio
+    // file exists and should be stored for history playback / time-capsule.
+    if (result.audioFilePath != null) _audioFilePath = result.audioFilePath;
+    if (result.voiceMetadata != null) _voiceMetadata = result.voiceMetadata;
+
+    if (result.transcript.isEmpty) return;
     setState(() {
       final text = result.transcript;
-      _rawVoiceMemo =
-          _rawVoiceMemo.isEmpty ? text : '$_rawVoiceMemo\n$text';
+      // Append to the raw voice controller (user can edit this section).
+      final existing = _rawVoiceController.text;
+      _rawVoiceController.text =
+          existing.isEmpty ? text : '$existing\n$text';
+      // Drop the raw transcript into the main text field as a placeholder so
+      // the user sees *something* while the AI summary is being generated.
       final cur = _textController.text;
       _textController.text = cur.isEmpty ? text : '$cur\n$text';
     });
+    // Then immediately ask the AI to rewrite that placeholder as a proper
+    // first-person diary entry. The user can still edit afterwards.
+    await _summariseIntoTextField();
+  }
+
+  /// Calls the AI right after voice input ends and replaces the text field
+  /// with the polished first-person diary entry. The polished version is
+  /// cached in [_aiPreview] so [_onDone] doesn't have to call the AI again.
+  Future<void> _summariseIntoTextField() async {
+    final rawText = _rawVoiceController.text.trim();
+    if (rawText.isEmpty) return;
+    final services = Services.of(context);
+    final settings = AppSettingsScope.of(context);
+    final l = AppLocalizations.of(context);
+    final localeCode = Localizations.localeOf(context).languageCode;
+
+    setState(() => _summarising = true);
+    try {
+      final today = DateTime.now();
+      final date = DateTime(today.year, today.month, today.day);
+      final activity = _health == null
+          ? null
+          : ActivityInfo(
+              steps: _health!.steps ?? 0,
+              sleepHours: _health!.sleepHours ?? 0,
+            );
+      final draft = DiaryEntry(
+        id: 'preview-${date.toIso8601String().substring(0, 10)}',
+        date: date,
+        userMemo: '',
+        rawVoiceMemo: rawText,
+        photoPaths: _photoPaths,
+        goals: _goals,
+        schedule: _schedule,
+        doneTasks: _doneTasks,
+        timeline: _timeline,
+        activity: activity,
+        audioFilePath: _audioFilePath,
+        voiceMetadata: _voiceMetadata,
+      );
+
+      final ai = await services.ai.generateDiary(
+        entry: draft,
+        personality: settings.effectivePersonality,
+        localeCode: localeCode,
+        voiceTranscript: rawText,
+      );
+
+      if (!mounted) return;
+      final outcome = services.ai.lastOutcome;
+      if (outcome == AiGenerationOutcome.live) {
+        // Real Gemini reply — drop the polished version into the field.
+        setState(() {
+          _aiPreview = ai;
+          _textController.text = ai.journal;
+        });
+      } else {
+        // Mock or fallback — keep the user's raw transcript in the text
+        // box (we already placed it there) and tell them the AI failed.
+        // Mock content like "夜の自炊" must NEVER leak into the journal.
+        final err = services.ai.lastErrorMessage;
+        final detail = (err != null && err.isNotEmpty)
+            ? '\n${err.length > 120 ? '${err.substring(0, 120)}…' : err}'
+            : '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('AI要約に失敗しました（[${outcome?.name}]）$detail'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } on FreeQuotaExceeded {
+      if (!mounted) return;
+      await _showUpgradeDialog();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${l.diaryAiFallback}\n$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _summarising = false);
+    }
   }
 
   void _dismissVoiceTooltip() {
@@ -186,7 +302,7 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
       id: 'd-${date.toIso8601String().substring(0, 10)}',
       date: date,
       userMemo: _textController.text,
-      rawVoiceMemo: _rawVoiceMemo,
+      rawVoiceMemo: _rawVoiceController.text,
       photoPaths: _photoPaths,
       goals: _goals,
       schedule: _schedule,
@@ -201,36 +317,114 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
     );
 
     try {
-      // No artificial particle overlay — go straight from tap to save.
-      final ai = await services.ai.generateDiary(
-        entry: draft,
-        personality: settings.effectivePersonality,
-        localeCode: localeCode,
-        voiceTranscript: _rawVoiceMemo,
-      );
+      // The text field is now the source of truth for the journal body —
+      // the user may have hand-edited the AI summary we dropped in earlier.
+      // We only round-trip back to the AI when there's NO preview yet
+      // (e.g. the user typed instead of dictating).
+      final edited = _textController.text.trim();
+      AiGenerationResult ai;
+      if (_aiPreview != null && edited.isNotEmpty) {
+        // Honour the user's edits as the final journal body. Title/feedback
+        // (and all bilingual fields) come from the cached AI preview so we
+        // don't re-bill the API.
+        ai = AiGenerationResult(
+          journal: edited,
+          feedback: _aiPreview!.feedback,
+          titleSuggestion: _aiPreview!.titleSuggestion,
+          journalEn: _aiPreview!.journalEn,
+          feedbackEn: _aiPreview!.feedbackEn,
+          radioIndex: _aiPreview!.radioIndex,
+        );
+      } else {
+        // Cold path: no preview, no voice input, or empty field → ask the
+        // AI to compose from scratch using whatever the user did type.
+        ai = await services.ai.generateDiary(
+          entry: draft,
+          personality: settings.effectivePersonality,
+          localeCode: localeCode,
+          voiceTranscript: _rawVoiceController.text,
+        );
+      }
 
       final completed = draft.copyWith(
         aiTitle: ai.titleSuggestion,
         aiJournal: ai.journal,
+        aiJournalEn: ai.journalEn,
         aiFeedback: ai.feedback,
+        aiFeedbackEn: ai.feedbackEn,
+        aiRadioIndex: ai.radioIndex,
+        audioFilePath: _audioFilePath,
+        audioDurationSeconds: _voiceMetadata?.totalDurationSeconds,
+        voiceMetadata: _voiceMetadata,
       );
       await services.diary.save(completed);
+
+      // Schedule time-capsule notification if a delivery date is set.
+      final capsule = completed.capsuleDeliveryDate;
+      if (capsule != null && capsule.isAfter(DateTime.now())) {
+        await TimeCapsuleService.instance.schedule(
+          entryId: completed.id,
+          deliveryDate: capsule,
+          title: l.timeCapsuleNotifTitle,
+          body: l.timeCapsuleNotifBody(
+            completed.aiTitle ?? completed.userMemo.substring(
+              0, completed.userMemo.length.clamp(0, 40)),
+          ),
+        );
+      }
 
       if (!mounted) return;
       setState(() => _saving = false);
 
       final outcome = services.ai.lastOutcome;
-      final saveMessage = outcome == AiGenerationOutcome.fallback
+      final baseMessage = outcome == AiGenerationOutcome.fallback
           ? l.diaryAiFallback
           : l.diarySaved;
+      // Debug tag — visible only in debug builds.
+      final outcomeTag = kDebugMode
+          ? switch (outcome) {
+              AiGenerationOutcome.live => ' [LIVE]',
+              AiGenerationOutcome.mock => ' [MOCK]',
+              AiGenerationOutcome.fallback => ' [FALLBACK]',
+              null => '',
+            }
+          : '';
+      // On fallback, show the first 120 chars of the underlying error so
+      // testers can report the root cause (bad key, blocked model, etc.).
+      final err = services.ai.lastErrorMessage;
+      final errSuffix = (outcome == AiGenerationOutcome.fallback &&
+              err != null &&
+              err.isNotEmpty)
+          ? '\n${err.length > 120 ? '${err.substring(0, 120)}…' : err}'
+          : '';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(saveMessage), duration: const Duration(seconds: 2)),
+        SnackBar(
+          content: Text('$baseMessage$outcomeTag$errSuffix'),
+          duration: const Duration(seconds: 8),
+        ),
       );
       context.pop();
     } on FreeQuotaExceeded {
+      // Quota exceeded — still save the diary using the raw text so the
+      // user doesn't lose their entry, then show the upgrade prompt.
+      if (!mounted) return;
+      final completed = draft.copyWith(
+        aiJournal: _textController.text.trim().isNotEmpty
+            ? _textController.text.trim()
+            : _rawVoiceController.text,
+        audioFilePath: _audioFilePath,
+        audioDurationSeconds: _voiceMetadata?.totalDurationSeconds,
+        voiceMetadata: _voiceMetadata,
+      );
+      await services.diary.save(completed);
       if (!mounted) return;
       setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.diarySaved)),
+      );
       await _showUpgradeDialog();
+      if (!mounted) return;
+      context.pop();
     }
   }
 
@@ -273,7 +467,7 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
       id: 'draft-${date.toIso8601String().substring(0, 10)}',
       date: date,
       userMemo: _textController.text,
-      rawVoiceMemo: _rawVoiceMemo,
+      rawVoiceMemo: _rawVoiceController.text,
       photoPaths: _photoPaths,
       goals: _goals,
       activity: activity,
@@ -282,6 +476,8 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
         tempC: 22,
         place: 'Tokyo',
       ),
+      audioFilePath: _audioFilePath,
+      voiceMetadata: _voiceMetadata,
     );
   }
 
@@ -353,12 +549,54 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
                   borderRadius: BorderRadius.circular(AppTheme.radius),
                   border: Border.all(color: theme.dividerColor),
                 ),
-                child: TextField(
-                  controller: _textController,
-                  maxLines: 5,
-                  minLines: 4,
-                  style: theme.textTheme.bodyLarge,
-                  decoration: InputDecoration(hintText: l.diaryPlaceholder),
+                child: Stack(
+                  children: [
+                    TextField(
+                      controller: _textController,
+                      // null = grow with content. minLines keeps the field
+                      // from collapsing too small when empty.
+                      maxLines: null,
+                      minLines: 4,
+                      keyboardType: TextInputType.multiline,
+                      style: theme.textTheme.bodyLarge,
+                      decoration:
+                          InputDecoration(hintText: l.diaryPlaceholder),
+                      onChanged: (value) {
+                        // When the user clears the polished journal, also
+                        // clear the raw voice section — they belong together
+                        // as a single user-controlled draft.
+                        if (value.trim().isEmpty &&
+                            _rawVoiceController.text.isNotEmpty) {
+                          setState(() {
+                            _rawVoiceController.text = '';
+                            _aiPreview = null;
+                          });
+                        }
+                      },
+                    ),
+                    if (_summarising)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'AIが要約中…',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
@@ -367,10 +605,21 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
                 count: _photoPaths.length,
                 onTap: _addPhoto,
               ),
-              if (_rawVoiceMemo.isNotEmpty) ...[
-                SectionLabel(l.diaryRawVoice),
-                _RawVoiceBlock(text: _rawVoiceMemo, hint: l.diaryRawVoiceHint),
-              ],
+              // "ありのままのつぶやき" — always visible and editable.
+              // Pre-filled from voice transcript; user can also type here.
+              SectionLabel(l.diaryRawVoice),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _rawVoiceController,
+                builder: (ctx, value, child) => _EditableRawVoiceBlock(
+                  controller: _rawVoiceController,
+                  hint: l.diaryRawVoiceHint,
+                  // Show "AI再生成" only when there is text to summarise.
+                  onAiRegenerate:
+                      value.text.trim().isNotEmpty && !_summarising
+                          ? _summariseIntoTextField
+                          : null,
+                ),
+              ),
               SectionLabel(l.diaryDailyGoals),
               GoalGrid(
                 goals: _goals,
@@ -634,16 +883,29 @@ class _Stat extends StatelessWidget {
   }
 }
 
-class _RawVoiceBlock extends StatelessWidget {
-  final String text;
+/// Editable "ありのままのつぶやき" block.
+///
+/// Pre-filled with the voice transcript; user can edit, correct, or add
+/// notes by typing.  Changes update [controller] immediately.
+/// When [onAiRegenerate] is non-null, a small "AI再生成" button appears so
+/// the user can ask the AI to re-polish the main journal after editing their
+/// raw notes.
+class _EditableRawVoiceBlock extends StatelessWidget {
+  final TextEditingController controller;
   final String hint;
-  const _RawVoiceBlock({required this.text, required this.hint});
+  final VoidCallback? onAiRegenerate;
+
+  const _EditableRawVoiceBlock({
+    required this.controller,
+    required this.hint,
+    this.onAiRegenerate,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppTheme.radius),
         border: Border.all(color: theme.dividerColor),
@@ -651,15 +913,46 @@ class _RawVoiceBlock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            text,
+          TextField(
+            controller: controller,
+            maxLines: null,
+            minLines: 2,
+            keyboardType: TextInputType.multiline,
             style: theme.textTheme.bodyLarge?.copyWith(
               height: 1.7,
               fontStyle: FontStyle.italic,
             ),
+            decoration: InputDecoration(
+              hintText: hint,
+              border: InputBorder.none,
+              isDense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(hint, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'あなたの声・言葉そのままです。AI日記には反映されません。',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              if (onAiRegenerate != null) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: onAiRegenerate,
+                  child: Text(
+                    'AI再生成',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );

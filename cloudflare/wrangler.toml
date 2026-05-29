@@ -1,0 +1,24 @@
+# AI Diary — Cloudflare Workers proxy configuration
+#
+# Quick-start:
+#   1. npm install -g wrangler
+#   2. wrangler login
+#   3. wrangler secret put OPENAI_API_KEY   # paste sk-proj-...
+#   4. wrangler secret put GEMINI_API_KEY   # paste AIzaSy...
+#   5. wrangler secret put APP_TOKEN        # any random 32+ char string
+#   6. wrangler deploy
+#
+# Your worker URL: https://ai-diary-proxy.<subdomain>.workers.dev
+# Enter it in the app: カスタム設定 → プロキシ設定 → プロキシURL
+
+name            = "ai-diary-proxy"
+main            = "worker.js"
+compatibility_date = "2024-09-23"
+
+# Free tier: 100,000 requests/day is more than enough for a personal diary app.
+# The Worker runs in Cloudflare's global edge network — ~0 ms cold start.
+
+# Secrets are NOT stored here — use `wrangler secret put`:
+#   OPENAI_API_KEY
+#   GEMINI_API_KEY
+#   APP_TOKEN

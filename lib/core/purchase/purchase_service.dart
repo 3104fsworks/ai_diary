@@ -16,4 +16,11 @@ abstract class PurchaseService {
 
   /// Restores entitlements (e.g. user reinstalled the app).
   Future<PurchaseResult> restore();
+
+  /// Checks whether the user currently holds an active premium entitlement.
+  ///
+  /// Reads from the SDK's local cache when offline — safe to call on startup.
+  /// Returns false when not subscribed or when the platform doesn't support
+  /// real purchases (e.g. Web).
+  Future<bool> checkEntitlement();
 }

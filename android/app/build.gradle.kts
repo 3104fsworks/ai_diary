@@ -23,7 +23,7 @@ if (file("google-services.json").exists()) {
 }
 
 android {
-    namespace = "jp.co.granhouse.ai_diary"
+    namespace = "com.aidiary.app"
     // Bumped from flutter.compileSdkVersion (33) → 36 because plugins like
     // geocoding_android and androidx.exifinterface require compileSdk 34+.
     compileSdk = 36
@@ -32,11 +32,12 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "jp.co.granhouse.ai_diary"
+        applicationId = "com.aidiary.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // The `health` plugin (Health Connect bridge) requires SDK 26+.
@@ -64,6 +65,13 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // R8 minification with our custom keep rules (proguard-rules.pro).
+            // Flutter already ships consumer rules for its own code; this file
+            // only adds rules for third-party plugins (record, Firebase, etc.).
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
@@ -76,4 +84,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

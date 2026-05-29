@@ -14,15 +14,19 @@ import '../core/health/real_health_service.dart';
 import '../core/location/location_timeline_service.dart';
 import '../core/purchase/mock_purchase_service.dart';
 import '../core/purchase/purchase_service.dart';
+import '../core/purchase/real_revenue_cat_purchase_service.dart';
 import '../core/tasks/mock_tasks_service.dart';
 import '../core/tasks/real_google_tasks_service.dart';
 import '../core/tasks/tasks_service.dart';
+import '../core/audio/audio_cleanup_service.dart';
 import '../data/repositories/diary_repository.dart';
 import '../data/repositories/survey_repository.dart';
 import '../data/repositories/timeline_repository.dart';
+import '../data/repositories/weekly_summary_repository.dart';
 import '../data/sources/local/local_diary_repository.dart';
 import '../data/sources/local/local_survey_repository.dart';
 import '../data/sources/local/local_timeline_repository.dart';
+import '../data/sources/local/local_weekly_summary_repository.dart';
 import '../data/sources/local/mock_diary_repository.dart';
 import '../data/sources/memory/in_memory_survey_repository.dart';
 import '../data/sources/memory/in_memory_timeline_repository.dart';
@@ -41,6 +45,7 @@ class ServiceLocator {
     required this.auth,
     required this.purchase,
     required this.survey,
+    required this.weeklySummary,
   });
 
   final DiaryRepository diary;
@@ -53,6 +58,9 @@ class ServiceLocator {
   final AuthService auth;
   final PurchaseService purchase;
   final SurveyRepository survey;
+
+  /// Week-scoped diary queries for the weekly AI radio and time-capsule.
+  final WeeklySummaryRepository weeklySummary;
 
   static Future<ServiceLocator> bootstrap({
     required AppSettings settings,
@@ -90,11 +98,16 @@ class ServiceLocator {
         ? RealGoogleTasksService(auth: auth)
         : MockTasksService();
 
-    // Purchase: mocked until RevenueCat is wired up. Real implementation
-    // will use the purchases_flutter package + product configuration.
-    final PurchaseService purchase = MockPurchaseService();
+    // Purchase: RevenueCat on Android, Mock on Web/unsupported platforms.
+    final PurchaseService purchase =
+        kIsWeb ? MockPurchaseService() : RealRevenueCatPurchaseService();
 
     final location = LocationTimelineService(repository: timeline);
+    // WeeklySummaryRepository layers on top of diary — no extra storage needed.
+    final WeeklySummaryRepository weeklySummary = kIsWeb
+        ? LocalWeeklySummaryRepository(MockDiaryRepository())
+        : LocalWeeklySummaryRepository(diary);
+
     final services = ServiceLocator._(
       diary: diary,
       timeline: timeline,
@@ -106,10 +119,20 @@ class ServiceLocator {
       auth: auth,
       purchase: purchase,
       survey: survey,
+      weeklySummary: weeklySummary,
     );
 
     if (!kIsWeb && settings.locationEnabled) {
       await location.start();
+    }
+
+    // Run audio cleanup on every cold start.
+    // Free users lose audio files older than 7 days; premium users keep all.
+    if (!kIsWeb) {
+      await AudioCleanupService(
+        diary: diary,
+        isPremium: settings.isPremium,
+      ).run();
     }
 
     return services;

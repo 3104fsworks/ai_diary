@@ -49,3 +49,8 @@ android/app/release.keystore
 android/key.properties
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
+
+# Build artifacts & JVM dumps
+build_log.txt
+*.hprof
+android/build/reports/

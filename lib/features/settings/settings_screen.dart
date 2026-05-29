@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_settings.dart';
@@ -7,8 +6,10 @@ import '../../app/router/app_router.dart';
 import '../../app/service_locator.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_theme.dart';
-import '../../core/export/bulk_markdown_exporter.dart';
+import '../../core/notifications/diary_reminder_service.dart';
+import '../../core/notifications/radio_notification_service.dart';
 import '../../data/models/ai_personality.dart';
+import '../../data/models/radio_voice_personality.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -19,7 +20,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _autoSyncOn = true;
 
   Future<void> _toggleHealth(bool on, AppSettings settings) async {
     final services = Services.of(context);
@@ -73,27 +73,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     context.go(AppRoutes.login);
   }
 
-  Future<void> _bulkExport(AppLocalizations l) async {
-    final services = Services.of(context);
-    final entries = await services.diary.listEntries();
-    if (!mounted) return;
-    try {
-      final count = await BulkMarkdownExporter.share(entries);
-      if (!mounted) return;
-      final msg = count == 0
-          ? l.settingsBulkMarkdownNone
-          : l.settingsBulkMarkdownDone(count);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export: $e')),
-      );
-    }
-  }
-
   Future<void> _toggleCalendar(bool on, AppSettings settings) async {
     final services = Services.of(context);
     final l = AppLocalizations.of(context);
@@ -130,6 +109,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await settings.setTasksEnabled(true);
   }
 
+  /// Enables/disables the daily diary-reminder notification.
+  /// Requests permission on first enable (Android 13+).
+  Future<void> _toggleDiaryReminder(bool on, AppSettings settings) async {
+    if (!on) {
+      await settings.setDiaryReminderEnabled(false);
+      await DiaryReminderService.instance.cancel();
+      return;
+    }
+    final granted = await DiaryReminderService.instance.requestPermission();
+    if (!granted) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('通知の許可が必要です。端末の設定アプリから「AI Diary」の通知を許可してください。'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+    await settings.setDiaryReminderEnabled(true);
+    await DiaryReminderService.instance.scheduleDaily(
+      hour: settings.diaryReminderHour,
+      enabled: true,
+    );
+  }
+
+  /// Enables/disables AIラジオ weekly & monthly notifications.
+  Future<void> _toggleRadioNotifications(bool on, AppSettings settings) async {
+    await settings.setRadioNotificationsEnabled(on);
+    await RadioNotificationService.instance.scheduleAll(enabled: on);
+  }
+
   Future<void> _toggleLocation(bool on, AppSettings settings) async {
     final services = Services.of(context);
     final l = AppLocalizations.of(context);
@@ -149,55 +160,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _editApiKey(
-    BuildContext context,
-    AppSettings settings,
-    AppLocalizations l,
-  ) async {
-    final controller = TextEditingController(text: settings.geminiApiKey);
-    final result = await showDialog<_KeyDialogResult>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(l.settingsAiApiKeyDialogTitle),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            obscureText: true,
-            decoration: InputDecoration(
-              hintText: l.settingsAiApiKeyDialogHint,
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(ctx, const _KeyDialogResult.clear()),
-              child: Text(l.settingsAiApiKeyClear),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(l.commonCancel),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(
-                ctx,
-                _KeyDialogResult.save(controller.text),
-              ),
-              child: Text(l.commonSave),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == null) return;
-    if (result.clear) {
-      await settings.setGeminiApiKey('');
-    } else {
-      await settings.setGeminiApiKey(result.value ?? '');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -215,17 +177,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           24 + MediaQuery.viewPaddingOf(context).bottom,
         ),
         children: [
-          // 0. Account — surfaced at the top so users can sign out easily.
-          if (settings.isSignedIn) ...[
-            _SectionHeader(label: l.settingsAccount),
-            _AccountTile(
-              signedInAsLabel: l.settingsAccountSignedInAs,
-              email: Services.of(context).auth.currentUser?.email
-                  ?? l.settingsAccountDemo,
-              signOutLabel: l.settingsSignOut,
-              onSignOut: () => _confirmSignOut(context, l),
-            ),
-          ],
           // 1. Appearance
           _SectionHeader(label: l.settingsAppearance),
           _ListTile(
@@ -336,7 +287,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => context.push(AppRoutes.plan),
             ),
 
-          // 4. Integrations
+          // 3b. AIラジオ声質
+          _SectionHeader(label: 'AIラジオ 声'),
+          // Gender (free)
+          _RadioGenderPicker(
+            value: settings.radioVoiceGender,
+            onChanged: settings.setRadioVoiceGender,
+          ),
+          const SizedBox(height: 8),
+          // Voice type (premium for non-standard)
+          if (settings.isPremium)
+            _RadioVoicePicker(
+              value: settings.radioVoiceType,
+              onChanged: settings.setRadioVoiceType,
+            )
+          else ...[
+            // Show standard as selected + locked others
+            _RadioVoicePicker(
+              value: RadioVoiceType.standard,
+              onChanged: settings.setRadioVoiceType,
+              lockedTypes: const {
+                RadioVoiceType.healing,
+                RadioVoiceType.energetic,
+                RadioVoiceType.dj,
+              },
+              onLockedTap: () => context.push(AppRoutes.plan),
+            ),
+          ],
+
+          // 4. Notifications
+          _SectionHeader(label: '通知'),
+          _SwitchTile(
+            label: '毎日の日記リマインダー',
+            subtitle: '毎晩${settings.diaryReminderHour}時に通知します',
+            value: settings.diaryReminderEnabled,
+            onChanged: (v) => _toggleDiaryReminder(v, settings),
+          ),
+          // Time picker row — visible only when reminder is enabled.
+          if (settings.diaryReminderEnabled)
+            _NotifTimeTile(
+              hour: settings.diaryReminderHour,
+              onChanged: (hour) async {
+                await settings.setDiaryReminderHour(hour);
+                await DiaryReminderService.instance.scheduleDaily(
+                  hour: hour,
+                  enabled: true,
+                );
+              },
+            ),
+          _SwitchTile(
+            label: 'AIラジオ通知',
+            subtitle: '毎週日曜・月末に生成をお知らせします',
+            value: settings.radioNotificationsEnabled,
+            onChanged: (v) => _toggleRadioNotifications(v, settings),
+          ),
+
+          // 5. Integrations
           _SectionHeader(label: l.settingsIntegrations),
           _SwitchTile(
             label: l.settingsHealth,
@@ -367,51 +373,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right, size: 20),
           ),
 
-          // 6. Sync + export
-          _SectionHeader(label: l.settingsAutoSync),
-          _SwitchTile(
-            label: l.settingsAutoSync,
-            value: _autoSyncOn,
-            onChanged: (v) => setState(() => _autoSyncOn = v),
-          ),
-          _DiaryFolderTile(
-            label: l.settingsDiaryFolder,
-            hint: l.settingsDiaryFolderHint,
-            copyLabel: l.settingsDiaryFolderCopy,
-            copiedLabel: l.settingsDiaryFolderCopied,
-            path: Services.of(context).diary.folderPath,
-          ),
+          // 6. カスタム設定（上級者向け）
+          _SectionHeader(label: 'カスタム'),
           _ListTile(
-            label: l.settingsBulkMarkdown,
-            onTap: () => _bulkExport(l),
-            trailing: const Icon(Icons.ios_share_outlined, size: 20),
-            subtitle: l.settingsBulkMarkdownHint,
-          ),
-          _ListTile(
-            label: l.settingsDataMigration,
-            onTap: () {},
+            label: 'カスタム設定',
+            subtitle: 'AI API・Obsidian連携・データ管理',
+            onTap: () => context.push(AppRoutes.customSettings),
             trailing: const Icon(Icons.chevron_right, size: 20),
           ),
 
-          // 7. AI API (moved here — just above Referral)
-          _SectionHeader(label: l.settingsAiApiTitle),
-          if (settings.isPremium)
-            _ApiKeyTile(
-              label: l.settingsAiApiKey,
-              masked: settings.geminiApiKeyMasked,
-              placeholder: l.settingsAiApiKeyNotSet,
-              help: l.settingsAiApiKeyHelp,
-              onEdit: () => _editApiKey(context, settings, l),
-            )
-          else
-            _LockedTile(
-              icon: Icons.lock_outline,
-              title: l.lockedByok,
-              actionLabel: l.lockedPremium,
-              onTap: () => context.push(AppRoutes.plan),
-            ),
-
-          // 8. Referral
+          // 7. Referral
           _SectionHeader(label: l.settingsReferral),
           Container(
             margin: const EdgeInsets.symmetric(vertical: 4),
@@ -482,6 +453,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
             trailing: const Icon(Icons.chevron_right, size: 20),
           ),
+
+          // Account / Sign out — at the very bottom
+          if (settings.isSignedIn) ...[
+            const SizedBox(height: 8),
+            _SectionHeader(label: l.settingsAccount),
+            _AccountTile(
+              signedInAsLabel: l.settingsAccountSignedInAs,
+              email: Services.of(context).auth.currentUser?.email
+                  ?? l.settingsAccountDemo,
+              signOutLabel: l.settingsSignOut,
+              onSignOut: () => _confirmSignOut(context, l),
+            ),
+          ],
 
           const SizedBox(height: 24),
           Text(
@@ -612,10 +596,12 @@ class _AccountTile extends StatelessWidget {
 
 class _SwitchTile extends StatelessWidget {
   final String label;
+  final String? subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
   const _SwitchTile({
     required this.label,
+    this.subtitle,
     required this.value,
     required this.onChanged,
   });
@@ -627,7 +613,21 @@ class _SwitchTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: theme.textTheme.bodyLarge)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.bodyLarge),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
+                  ),
+                ],
+              ],
+            ),
+          ),
           Switch(value: value, onChanged: onChanged),
         ],
       ),
@@ -728,72 +728,35 @@ class _PersonalityPicker extends StatelessWidget {
   }
 }
 
-/// Shows the local diary folder path so users can configure their
-/// Obsidian Vault to mirror this location.
-class _DiaryFolderTile extends StatelessWidget {
-  final String label;
-  final String hint;
-  final String copyLabel;
-  final String copiedLabel;
-  final String? path;
+// ─────────────────────────────────────────────────────────────────────────────
+// Radio voice pickers
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const _DiaryFolderTile({
-    required this.label,
-    required this.hint,
-    required this.copyLabel,
-    required this.copiedLabel,
-    required this.path,
-  });
+class _RadioGenderPicker extends StatelessWidget {
+  final RadioVoiceGender value;
+  final void Function(RadioVoiceGender) onChanged;
+
+  const _RadioGenderPicker({required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final p = path;
-    if (p == null) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
         children: [
-          Text(label, style: theme.textTheme.bodyLarge),
-          const SizedBox(height: 6),
-          Text(
-            hint,
-            style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
+          Text('声の性別', style: theme.textTheme.bodyLarge),
+          const Spacer(),
+          _GenderChip(
+            label: '女性',
+            selected: value == RadioVoiceGender.female,
+            onTap: () => onChanged(RadioVoiceGender.female),
           ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-              color: theme.dividerColor.withValues(alpha: 0.35),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    p,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: 'Courier',
-                      height: 1.45,
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  tooltip: copyLabel,
-                  icon: const Icon(Icons.copy_rounded, size: 18),
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: p));
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(copiedLabel)),
-                    );
-                  },
-                ),
-              ],
-            ),
+          const SizedBox(width: 8),
+          _GenderChip(
+            label: '男性',
+            selected: value == RadioVoiceGender.male,
+            onTap: () => onChanged(RadioVoiceGender.male),
           ),
         ],
       ),
@@ -801,14 +764,210 @@ class _DiaryFolderTile extends StatelessWidget {
   }
 }
 
-class _KeyDialogResult {
-  final String? value;
-  final bool clear;
-  const _KeyDialogResult.save(this.value) : clear = false;
-  const _KeyDialogResult.clear()
-      : value = null,
-        clear = true;
+class _GenderChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _GenderChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: selected
+              ? theme.colorScheme.primary
+              : theme.colorScheme.primary.withValues(alpha: 0.08),
+        ),
+        child: Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: selected
+                ? theme.colorScheme.onPrimary
+                : theme.colorScheme.primary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
 }
+
+class _RadioVoicePicker extends StatelessWidget {
+  final RadioVoiceType value;
+  final void Function(RadioVoiceType) onChanged;
+  final Set<RadioVoiceType> lockedTypes;
+  final VoidCallback? onLockedTap;
+
+  const _RadioVoicePicker({
+    required this.value,
+    required this.onChanged,
+    this.lockedTypes = const {},
+    this.onLockedTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: RadioVoiceType.values.map((type) {
+        final isLocked = lockedTypes.contains(type);
+        final isSelected = value == type;
+        return GestureDetector(
+          onTap: isLocked ? onLockedTap : () => onChanged(type),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                // Radio circle
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected
+                          ? theme.colorScheme.primary
+                          : theme.dividerColor,
+                      width: 2,
+                    ),
+                  ),
+                  child: isSelected
+                      ? Center(
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        type.labelJa,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: isLocked
+                              ? theme.textTheme.bodySmall?.color
+                              : null,
+                        ),
+                      ),
+                      Text(
+                        type.descJa,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          height: 1.4,
+                          color: theme.textTheme.bodySmall?.color
+                              ?.withValues(alpha: isLocked ? 0.5 : 0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isLocked)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary
+                          .withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Premium',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ── Notification time picker row ─────────────────────────────────────────────
+
+/// Tappable row that opens a time picker for the diary-reminder hour.
+class _NotifTimeTile extends StatelessWidget {
+  final int hour;
+  final ValueChanged<int> onChanged;
+  const _NotifTimeTile({required this.hour, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label =
+        '${hour.toString().padLeft(2, '0')}:00';
+    return InkWell(
+      onTap: () async {
+        final picked = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay(hour: hour, minute: 0),
+          helpText: 'リマインダー時刻',
+          builder: (ctx, child) => MediaQuery(
+            data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
+            child: child!,
+          ),
+        );
+        if (picked != null) onChanged(picked.hour);
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 6, 0, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'リマインダー時刻',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.textTheme.bodySmall?.color,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                border: Border.all(color: theme.dividerColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label, style: theme.textTheme.bodyMedium),
+                  const SizedBox(width: 6),
+                  Icon(Icons.access_time,
+                      size: 16,
+                      color: theme.textTheme.bodySmall?.color),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _LockedTile extends StatelessWidget {
   final IconData icon;
@@ -870,52 +1029,3 @@ class _LockedTile extends StatelessWidget {
   }
 }
 
-class _ApiKeyTile extends StatelessWidget {
-  final String label;
-  final String masked;
-  final String placeholder;
-  final String help;
-  final VoidCallback onEdit;
-
-  const _ApiKeyTile({
-    required this.label,
-    required this.masked,
-    required this.placeholder,
-    required this.help,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasKey = masked.isNotEmpty;
-    return InkWell(
-      onTap: onEdit,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text(label, style: theme.textTheme.bodyLarge)),
-                Text(
-                  hasKey ? masked : placeholder,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: hasKey
-                        ? theme.colorScheme.onSurface
-                        : theme.textTheme.bodySmall?.color,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const Icon(Icons.chevron_right, size: 20),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(help, style: theme.textTheme.bodySmall?.copyWith(height: 1.5)),
-          ],
-        ),
-      ),
-    );
-  }
-}

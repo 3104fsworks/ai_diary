@@ -55,6 +55,15 @@ class HomeScreen extends StatelessWidget {
             const Spacer(flex: 1),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _SecondaryButton(
+                label: l.homeWeeklyRadio,
+                onTap: () => context.push(AppRoutes.weeklyRadio),
+                icon: Icons.radio_outlined,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Row(
                 children: [
                   Expanded(
@@ -179,7 +188,8 @@ class _PrimaryCircleButtonState extends State<_PrimaryCircleButton> {
 class _SecondaryButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
-  const _SecondaryButton({required this.label, required this.onTap});
+  final IconData? icon;
+  const _SecondaryButton({required this.label, required this.onTap, this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -193,12 +203,24 @@ class _SecondaryButton extends StatelessWidget {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 6),
         ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 13),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 16),
+              const SizedBox(width: 6),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -72,23 +72,43 @@ class PromptBuilder {
     return buf.toString();
   }
 
-  /// Parses the model's `## Title / ## Journal / ## AI Feedback` output.
-  /// Resilient to minor variations: extra whitespace, missing sections.
+  /// Parses the model's 6-section output into a [ParsedDiaryOutput].
+  ///
+  /// Expected sections (case-insensitive, order flexible):
+  ///   ## Title
+  ///   ## Journal           ← JP full diary
+  ///   ## Journal EN        ← EN 3-4 sentence summary
+  ///   ## AI Feedback JP    ← JP short comment
+  ///   ## AI Feedback EN    ← EN short comment
+  ///   ## Radio Index       ← EN compact bullet block
+  ///
+  /// Resilient to minor variations: extra whitespace, missing sections,
+  /// or models that still only return the original 3 sections.
   static ParsedDiaryOutput parseModelOutput(String text) {
     final t = text.trim();
     String? title;
     String? journal;
+    String? journalEn;
     String? feedback;
+    String? feedbackEn;
+    String? radioIndex;
 
     final sections = _splitSections(t);
     for (final s in sections) {
-      final key = s.heading.toLowerCase();
-      if (key.contains('title')) {
+      final key = s.heading.toLowerCase().trim();
+      if (key == 'title') {
         title = s.body.trim();
-      } else if (key.contains('journal')) {
+      } else if (key == 'journal') {
         journal = s.body.trim();
+      } else if (key.contains('journal') && key.contains('en')) {
+        journalEn = s.body.trim();
+      } else if (key.contains('feedback') && key.contains('en')) {
+        feedbackEn = s.body.trim();
       } else if (key.contains('feedback')) {
+        // Catches "AI Feedback JP", "AI Feedback", "feedback jp"
         feedback = s.body.trim();
+      } else if (key.contains('radio') || key.contains('index')) {
+        radioIndex = s.body.trim();
       }
     }
 
@@ -99,7 +119,10 @@ class PromptBuilder {
     return ParsedDiaryOutput(
       title: title,
       journal: journal ?? '',
+      journalEn: journalEn ?? '',
       feedback: feedback ?? '',
+      feedbackEn: feedbackEn ?? '',
+      radioIndex: radioIndex ?? '',
     );
   }
 
@@ -132,48 +155,121 @@ class PromptBuilder {
   static String _basePrompt(String locale) {
     if (locale == 'ja') {
       return '''
-あなたはユーザーのその日1日を、本人視点（1人称）で短い日記にまとめるアシスタントです。
+あなたはユーザー本人になりきって、その日の日記を書きます。
+ユーザーへの励ましやメッセージを書く役ではありません。
+書き手は「ユーザー本人」、読み手も「未来のユーザー本人」です。
 
 ルール:
-- 「Title」「Journal」「AI Feedback」の3セクションを必ず生成する
-- Title: 体言止めの短い1行（10〜20字程度）。例: 「静かな1日」「渋谷の打ち合わせ」
-- Journal: 本文（200〜350字目安）
-- AI Feedback: 短い労いコメント（1〜2文）
-- ユーザーの体験をそのまま尊重し、創作や脚色は禁止
-- データに無い情報を勝手に追加しない
-- 重要でない予定や歩数の羅列はしない（流れの中で自然に触れる程度）
+- 以下の6セクションを必ず生成する（順番厳守、余計な前置き・後書き禁止）
 
-出力フォーマット（厳密にこの形式を守ること、余計な前置きや後書きは禁止）:
+- Title:
+    - その日のハイライトを表す体言止め1行（10〜20字程度）
+    - 例: 「AI開発に集中した一日」「渋谷の打ち合わせ」「久しぶりの自炊」
+    - 「静かな1日」のような中身のない汎用タイトルは禁止
+
+- Journal（日本語・最重要）:
+    - 必ず一人称（私／僕／自分）で書く
+    - 二人称（あなた／君）や読者への呼びかけは絶対禁止
+    - 「〜した」か「〜していました」どちらかに統一（混在禁止）
+    - 本文 300〜500字。音声のエピソード・出来事をすべて含める
+    - データ（歩数・予定・完了タスク）は流れの中で自然に触れる
+    - 創作・脚色・データに無い情報の追加は禁止
+
+- Journal EN（英語要約）:
+    - 上記の日本語日記を洗練された英語で3〜4文に要約・翻訳する
+    - 一人称（I）で書く。固有名詞・出来事は省略しない
+    - AIラジオがトークン節約のためにこの要約を長期参照するため、情報密度を高く保つ
+
+- AI Feedback JP（日本語コメント）:
+    - 短い労いコメント（1〜2文）
+    - ここだけは「あなた／君」など二人称で書いて構わない
+    - 例:「お疲れさま。今日もしっかり前に進んだね。」
+
+- AI Feedback EN（英語コメント）:
+    - 上記日本語コメントの英語訳（1〜2文）
+
+- Radio Index（ラジオインデックス・英語のみ）:
+    - AIラジオが長期振り返り時に使う超軽量インデックス
+    - 以下の形式を厳守（箇条書き2行のみ）:
+      - **Core Action:** [今日の最大の出来事・行動・状態を英語2文以内で超簡潔に要約]
+      - **AI Sentiment:** [声のトーン・内容から推測される心理状態を英語キーワード2つで表現 例: Focused calm, quiet satisfaction]
+
+出力フォーマット（この形式のみ出力。プレテキスト・ポストテキスト禁止）:
 ## Title
 ここに1行のタイトル
 
 ## Journal
-ここに本文
+ここに本文（一人称、日本語）
 
-## AI Feedback
-ここに短いコメント
+## Journal EN
+Here is the 3-4 sentence English summary.
+
+## AI Feedback JP
+ここに短いコメント（日本語、二人称OK）
+
+## AI Feedback EN
+Short comment here (English).
+
+## Radio Index
+- **Core Action:** [2 concise English sentences]
+- **AI Sentiment:** [2 English keywords]
 ''';
     }
     return '''
-You write a short first-person diary summarizing the user's day.
+You write the day's diary AS THE USER (first-person). You are NOT writing a
+message TO the user. The author IS the user; the reader is their future self.
 
 Rules:
-- Always produce three sections: ## Title, ## Journal, ## AI Feedback
-- Title: a short noun-phrase, ~3–6 words. e.g. "A quiet day", "Meeting in Shibuya"
-- Journal: body text (180–300 words)
-- AI Feedback: 1–2 short sentences of acknowledgement
-- Respect the user's experience exactly; do not invent details
-- Do not list raw data; weave it naturally into prose
+- Always produce all SIX sections below (strict order, no preamble or trailing notes).
 
-Output format (follow strictly, no preamble or trailing notes):
+- Title:
+    - A specific noun-phrase capturing the day's highlight (3–6 words)
+    - e.g. "A day deep in AI dev", "Meeting in Shibuya", "Cooking again at last"
+    - Avoid generic stand-ins like "A quiet day"
+
+- Journal (CRITICAL):
+    - First-person only ("I worked…", "I felt…")
+    - NEVER second-person or reader-addressing
+    - Pick one register (past simple OR present) and keep it consistent
+    - 250–400 words. Include all episodes from the voice transcript
+    - Weave activity / schedule / tasks naturally; never list them
+    - No invention or embellishment beyond the data provided
+
+- Journal EN:
+    - 3-4 polished English sentences summarising the JP journal
+    - First-person (I). Keep names, events — information-dense for AI Radio lookback
+
+- AI Feedback JP:
+    - 1-2 short Japanese sentences acknowledging the user's day (second-person OK here)
+
+- AI Feedback EN:
+    - English translation of the JP feedback (1-2 sentences)
+
+- Radio Index:
+    - Ultra-compact English block for AI Radio long-term lookback
+    - Exactly two bullet lines, no more:
+      - **Core Action:** [2 concise English sentences about today's key event/action/state]
+      - **AI Sentiment:** [2 English keywords for the user's psychological state e.g. "Focused calm, quiet satisfaction"]
+
+Output format (output ONLY this — no preamble, no trailing notes):
 ## Title
 single-line title
 
 ## Journal
-body text
+body text (first-person, JP or EN based on locale)
 
-## AI Feedback
-short comment
+## Journal EN
+3-4 sentence English summary.
+
+## AI Feedback JP
+Short Japanese comment (second-person OK).
+
+## AI Feedback EN
+Short English comment.
+
+## Radio Index
+- **Core Action:** 2 concise sentences.
+- **AI Sentiment:** keyword1, keyword2
 ''';
   }
 
@@ -269,12 +365,29 @@ This constraint overrides the personality clause below.
 
 class ParsedDiaryOutput {
   final String? title;
+
+  /// Full first-person diary in Japanese (or English if locale == 'en').
   final String journal;
+
+  /// 3-4 sentence English summary.
+  final String journalEn;
+
+  /// Short AI comment in Japanese.
   final String feedback;
+
+  /// Short AI comment in English.
+  final String feedbackEn;
+
+  /// Ultra-compact English bullet block for AI Radio Index.
+  final String radioIndex;
+
   const ParsedDiaryOutput({
     required this.title,
     required this.journal,
+    required this.journalEn,
     required this.feedback,
+    required this.feedbackEn,
+    required this.radioIndex,
   });
 }
 

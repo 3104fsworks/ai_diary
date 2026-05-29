@@ -227,6 +227,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tutorialSkip => 'スキップ';
 
   @override
+  String get homeWeeklyRadio => '今週のAIラジオ';
+
+  @override
   String get homeViewPast => '過去の日記';
 
   @override
@@ -634,6 +637,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get planRestore => '購入を復元';
 
   @override
+  String get planRestoreSuccess => '購入を復元しました。';
+
+  @override
+  String get planRestoreNone => '有効なサブスクリプションが見つかりませんでした。';
+
+  @override
   String planPurchaseSuccess(String plan) {
     return '$planに登録しました。';
   }
@@ -721,4 +730,77 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get weatherSnowy => '雪';
+
+  @override
+  String get voiceRecording => '録音中';
+
+  @override
+  String get voiceInitialising => '準備中…';
+
+  @override
+  String get voiceRecordingHint => '思いのまま、話してください。\n最大2分間録音できます。';
+
+  @override
+  String get voiceTranscribing => '文字起こし中…';
+
+  @override
+  String get voiceTranscribingHint => 'Whisperがあなたの声を文字に変換しています。\nそのままお待ちください。';
+
+  @override
+  String get voiceNoApiKeyTitle => 'OpenAI APIキーが必要です';
+
+  @override
+  String get voiceNoApiKeyBody =>
+      '音声入力にはWhisperを使用します。\n設定 → AI API → OpenAI APIキー から入力してください。\n（OpenAI Platformでキーを無料で発行できます）';
+
+  @override
+  String get settingsOpenAiApiKey => 'OpenAI APIキー（Whisper音声認識）';
+
+  @override
+  String get settingsOpenAiApiKeyNotSet => '未設定 — 音声入力は利用できません';
+
+  @override
+  String get settingsOpenAiApiKeyHelp =>
+      'Whisper音声認識に使用します（\$0.006/分）。キーはこの端末にのみ保存されます。platform.openai.com で発行できます。';
+
+  @override
+  String get settingsOpenAiApiKeyDialogTitle => 'OpenAI APIキー';
+
+  @override
+  String get settingsOpenAiApiKeyDialogHint => 'sk-... を貼り付け';
+
+  @override
+  String get settingsOpenAiApiKeyClear => '削除';
+
+  @override
+  String get historyVoicePlay => '録音を再生';
+
+  @override
+  String get historyVoicePlaying => '再生中…';
+
+  @override
+  String get historyVoicePause => '一時停止';
+
+  @override
+  String get historyVoiceFileGone => '音声ファイルが見つかりません';
+
+  @override
+  String get timeCapsuleNotifTitle => 'タイムカプセルが届きました 📬';
+
+  @override
+  String timeCapsuleNotifBody(String title) {
+    return 'あの日のあなたからメッセージ：$title';
+  }
+
+  @override
+  String get weeklyRadioTitle => '今週のAIラジオ';
+
+  @override
+  String get weeklyRadioSubtitle => '1週間の声の記録から、あなたの物語をお届けします。';
+
+  @override
+  String get weeklyRadioNoEntries => '今週の録音がまだありません。';
+
+  @override
+  String get weeklyRadioPremiumArchive => 'プレミアムプランで過去の全エピソードを保存。';
 }

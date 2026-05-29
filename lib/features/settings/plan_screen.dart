@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_settings.dart';
@@ -51,13 +52,26 @@ class _PlanScreenState extends State<PlanScreen> {
   Future<void> _restore() async {
     if (_busy) return;
     setState(() => _busy = true);
+    final l = AppLocalizations.of(context);
     final services = Services.of(context);
     final result = await services.purchase.restore();
     if (!mounted) return;
     setState(() => _busy = false);
-    if (result.status == PurchaseStatus.success) {
-      final settings = AppSettingsScope.of(context);
-      await settings.setPremium(true);
+    switch (result.status) {
+      case PurchaseStatus.success:
+        final settings = AppSettingsScope.of(context);
+        await settings.setPremium(true);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l.planRestoreSuccess)),
+        );
+      case PurchaseStatus.error:
+      case PurchaseStatus.pending:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l.planRestoreNone)),
+        );
+      case PurchaseStatus.cancelled:
+        break;
     }
   }
 
@@ -182,13 +196,16 @@ class _PlanScreenState extends State<PlanScreen> {
             onPressed: _busy ? null : _restore,
             child: Text(l.planRestore),
           ),
-          const SizedBox(height: 16),
-          OutlinedButton(
-            onPressed: () => settings.setPremium(!settings.isPremium),
-            child: Text(
-              settings.isPremium ? l.planTestDisable : l.planTestEnable,
+          // ── Debug toggle — hidden in release builds ──────────────────────
+          if (kDebugMode) ...[
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => settings.setPremium(!settings.isPremium),
+              child: Text(
+                settings.isPremium ? l.planTestDisable : l.planTestEnable,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/app_settings.dart';
 import '../../app/router/app_router.dart';
+import '../../core/notifications/diary_reminder_service.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class TutorialScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class TutorialScreen extends StatefulWidget {
 class _TutorialScreenState extends State<TutorialScreen> {
   final _controller = PageController();
   int _page = 0;
+  bool _requestingPermission = false;
 
   @override
   void dispose() {
@@ -22,28 +24,62 @@ class _TutorialScreenState extends State<TutorialScreen> {
     super.dispose();
   }
 
+  void _completeOnboarding() {
+    AppSettingsScope.of(context).setOnboardingDone(true);
+    context.go(AppRoutes.home);
+  }
+
+  /// Requests notification permission, schedules daily reminder at 21:00,
+  /// then completes onboarding.
+  Future<void> _allowNotificationsAndComplete() async {
+    if (_requestingPermission) return;
+    setState(() => _requestingPermission = true);
+    try {
+      final granted =
+          await DiaryReminderService.instance.requestPermission();
+      if (granted && mounted) {
+        final settings = AppSettingsScope.of(context);
+        await settings.setDiaryReminderEnabled(true);
+        await DiaryReminderService.instance.scheduleDaily(
+          hour: settings.diaryReminderHour,
+          enabled: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _requestingPermission = false);
+    }
+    if (!mounted) return;
+    _completeOnboarding();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
 
-    final pages = [
+    // The notification-permission page is a special widget (not _TutorialPage).
+    final pages = <Widget>[
       _TutorialPage(title: l.tutorialTitle1, body: l.tutorialBody1),
       _TutorialPage(title: l.tutorialTitle2, body: l.tutorialBody2),
       _TutorialPage(title: l.tutorialTitle3, body: l.tutorialBody3),
+      _NotifPermissionPage(
+        onAllow: _allowNotificationsAndComplete,
+        loading: _requestingPermission,
+      ),
     ];
+
+    final isLastPage = _page == pages.length - 1;
+    // On the notification page the bottom button becomes "あとで設定する".
+    final bottomLabel = isLastPage ? 'あとで設定する' : l.surveyNext;
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          if (_page < pages.length - 1)
+          if (!isLastPage)
             TextButton(
-              onPressed: () {
-                AppSettingsScope.of(context).setOnboardingDone(true);
-                context.go(AppRoutes.home);
-              },
+              onPressed: _completeOnboarding,
               child: Text(
                 l.tutorialSkip,
                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -86,20 +122,23 @@ class _TutorialScreenState extends State<TutorialScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: ElevatedButton(
-                onPressed: () {
-                  if (_page < pages.length - 1) {
-                    _controller.nextPage(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                  } else {
-                    AppSettingsScope.of(context).setOnboardingDone(true);
-                    context.go(AppRoutes.home);
-                  }
-                },
-                child: Text(
-                  _page == pages.length - 1 ? l.tutorialStart : l.surveyNext,
-                ),
+                // Last page: "あとで設定する" → skip notifications → complete.
+                // Other pages: advance to next page.
+                onPressed: isLastPage
+                    ? _completeOnboarding
+                    : () => _controller.nextPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        ),
+                style: isLastPage
+                    ? ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.surface,
+                        foregroundColor: theme.textTheme.bodySmall?.color,
+                        elevation: 0,
+                        side: BorderSide(color: theme.dividerColor),
+                      )
+                    : null,
+                child: Text(bottomLabel),
               ),
             ),
             const SizedBox(height: 24),
@@ -131,6 +170,71 @@ class _TutorialPage extends StatelessWidget {
             style: theme.textTheme.bodyLarge?.copyWith(
               color: theme.textTheme.bodySmall?.color,
               height: 1.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Notification permission page (tutorial step 4) ────────────────────────────
+
+class _NotifPermissionPage extends StatelessWidget {
+  final VoidCallback onAllow;
+  final bool loading;
+  const _NotifPermissionPage({required this.onAllow, this.loading = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Bell icon
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.notifications_outlined,
+              size: 28,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 28),
+          Text(
+            '毎日の日記リマインダー',
+            style: theme.textTheme.displayLarge,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '毎晩21時に「今日はどんな1日でしたか？」とやさしく声をかけます。\n\n'
+            '後から設定画面でいつでも時刻の変更・オフにできます。',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.textTheme.bodySmall?.color,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: 40),
+          // Primary action — allow notifications
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: loading ? null : onAllow,
+              child: loading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('通知をオンにする'),
             ),
           ),
         ],

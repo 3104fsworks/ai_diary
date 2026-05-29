@@ -42,4 +42,7 @@ class MockPurchaseService implements PurchaseService {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     return const PurchaseResult(status: PurchaseStatus.success);
   }
+
+  @override
+  Future<bool> checkEntitlement() async => false;
 }

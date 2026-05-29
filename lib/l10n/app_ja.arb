@@ -79,6 +79,7 @@
   "tutorialStart": "はじめる",
   "tutorialSkip": "スキップ",
 
+  "homeWeeklyRadio": "今週のAIラジオ",
   "homeViewPast": "過去の日記",
   "homeWriteToday": "日記を書く",
   "homeSettings": "設定",
@@ -221,6 +222,8 @@
   "planTestDisable": "[テスト] Premiumを解除",
   "planSubscribe": "このプランで登録",
   "planRestore": "購入を復元",
+  "planRestoreSuccess": "購入を復元しました。",
+  "planRestoreNone": "有効なサブスクリプションが見つかりませんでした。",
   "planPurchaseSuccess": "{plan}に登録しました。",
   "@planPurchaseSuccess": {"placeholders": {"plan": {"type": "String"}}},
   "planPurchaseCancelled": "購入をキャンセルしました。",
@@ -255,5 +258,38 @@
   "weatherSunny": "晴れ",
   "weatherCloudy": "くもり",
   "weatherRainy": "雨",
-  "weatherSnowy": "雪"
+  "weatherSnowy": "雪",
+
+  "voiceRecording": "録音中",
+  "voiceInitialising": "準備中…",
+  "voiceRecordingHint": "思いのまま、話してください。\n最大2分間録音できます。",
+  "voiceTranscribing": "文字起こし中…",
+  "voiceTranscribingHint": "Whisperがあなたの声を文字に変換しています。\nそのままお待ちください。",
+  "voiceNoApiKeyTitle": "OpenAI APIキーが必要です",
+  "voiceNoApiKeyBody": "音声入力にはWhisperを使用します。\n設定 → AI API → OpenAI APIキー から入力してください。\n（OpenAI Platformでキーを無料で発行できます）",
+
+  "settingsOpenAiApiKey": "OpenAI APIキー（Whisper音声認識）",
+  "settingsOpenAiApiKeyNotSet": "未設定 — 音声入力は利用できません",
+  "settingsOpenAiApiKeyHelp": "Whisper音声認識に使用します（$0.006/分）。キーはこの端末にのみ保存されます。platform.openai.com で発行できます。",
+  "settingsOpenAiApiKeyDialogTitle": "OpenAI APIキー",
+  "settingsOpenAiApiKeyDialogHint": "sk-... を貼り付け",
+  "settingsOpenAiApiKeyClear": "削除",
+
+  "historyVoicePlay": "録音を再生",
+  "historyVoicePlaying": "再生中…",
+  "historyVoicePause": "一時停止",
+  "historyVoiceFileGone": "音声ファイルが見つかりません",
+
+  "timeCapsuleNotifTitle": "タイムカプセルが届きました 📬",
+  "timeCapsuleNotifBody": "あの日のあなたからメッセージ：{title}",
+  "@timeCapsuleNotifBody": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+
+  "weeklyRadioTitle": "今週のAIラジオ",
+  "weeklyRadioSubtitle": "1週間の声の記録から、あなたの物語をお届けします。",
+  "weeklyRadioNoEntries": "今週の録音がまだありません。",
+  "weeklyRadioPremiumArchive": "プレミアムプランで過去の全エピソードを保存。"
 }

@@ -79,6 +79,7 @@
   "tutorialStart": "Get started",
   "tutorialSkip": "Skip",
 
+  "homeWeeklyRadio": "Weekly AI Radio",
   "homeViewPast": "Past diaries",
   "homeWriteToday": "Write diary",
   "homeSettings": "Settings",
@@ -226,6 +227,8 @@
   "planTestDisable": "[Test] Disable Premium",
   "planSubscribe": "Subscribe",
   "planRestore": "Restore purchases",
+  "planRestoreSuccess": "Purchases restored successfully.",
+  "planRestoreNone": "No active subscription found.",
   "planPurchaseSuccess": "You're now on the {plan} plan.",
   "@planPurchaseSuccess": {"placeholders": {"plan": {"type": "String"}}},
   "planPurchaseCancelled": "Purchase cancelled.",
@@ -260,5 +263,38 @@
   "weatherSunny": "Sunny",
   "weatherCloudy": "Cloudy",
   "weatherRainy": "Rainy",
-  "weatherSnowy": "Snowy"
+  "weatherSnowy": "Snowy",
+
+  "voiceRecording": "REC",
+  "voiceInitialising": "Getting ready…",
+  "voiceRecordingHint": "Speak freely — up to 2 minutes.",
+  "voiceTranscribing": "Transcribing…",
+  "voiceTranscribingHint": "Whisper is turning your voice into text.\nJust a moment.",
+  "voiceNoApiKeyTitle": "OpenAI API key required",
+  "voiceNoApiKeyBody": "Voice input uses Whisper for transcription.\nGo to Settings → AI API → OpenAI API key.\n(Get a free key at platform.openai.com)",
+
+  "settingsOpenAiApiKey": "OpenAI API key (Whisper voice input)",
+  "settingsOpenAiApiKeyNotSet": "Not set — voice input unavailable",
+  "settingsOpenAiApiKeyHelp": "Used for Whisper transcription ($0.006/min). Key stored on this device only. Get one at platform.openai.com.",
+  "settingsOpenAiApiKeyDialogTitle": "OpenAI API key",
+  "settingsOpenAiApiKeyDialogHint": "Paste your sk-... key here",
+  "settingsOpenAiApiKeyClear": "Remove",
+
+  "historyVoicePlay": "Play recording",
+  "historyVoicePlaying": "Playing…",
+  "historyVoicePause": "Pause",
+  "historyVoiceFileGone": "Audio file not found",
+
+  "timeCapsuleNotifTitle": "Your time capsule has arrived 📬",
+  "timeCapsuleNotifBody": "A message from past you: {title}",
+  "@timeCapsuleNotifBody": {
+    "placeholders": {
+      "title": { "type": "String" }
+    }
+  },
+
+  "weeklyRadioTitle": "Weekly AI Radio",
+  "weeklyRadioSubtitle": "Your week's voice diary, turned into a personal documentary.",
+  "weeklyRadioNoEntries": "No recordings this week yet.",
+  "weeklyRadioPremiumArchive": "Premium plan keeps every episode forever."
 }

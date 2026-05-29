@@ -233,6 +233,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tutorialSkip => 'Skip';
 
   @override
+  String get homeWeeklyRadio => 'Weekly AI Radio';
+
+  @override
   String get homeViewPast => 'Past diaries';
 
   @override
@@ -648,6 +651,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get planRestore => 'Restore purchases';
 
   @override
+  String get planRestoreSuccess => 'Purchases restored successfully.';
+
+  @override
+  String get planRestoreNone => 'No active subscription found.';
+
+  @override
   String planPurchaseSuccess(String plan) {
     return 'You\'re now on the $plan plan.';
   }
@@ -735,4 +744,80 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get weatherSnowy => 'Snowy';
+
+  @override
+  String get voiceRecording => 'REC';
+
+  @override
+  String get voiceInitialising => 'Getting ready…';
+
+  @override
+  String get voiceRecordingHint => 'Speak freely — up to 2 minutes.';
+
+  @override
+  String get voiceTranscribing => 'Transcribing…';
+
+  @override
+  String get voiceTranscribingHint =>
+      'Whisper is turning your voice into text.\nJust a moment.';
+
+  @override
+  String get voiceNoApiKeyTitle => 'OpenAI API key required';
+
+  @override
+  String get voiceNoApiKeyBody =>
+      'Voice input uses Whisper for transcription.\nGo to Settings → AI API → OpenAI API key.\n(Get a free key at platform.openai.com)';
+
+  @override
+  String get settingsOpenAiApiKey => 'OpenAI API key (Whisper voice input)';
+
+  @override
+  String get settingsOpenAiApiKeyNotSet => 'Not set — voice input unavailable';
+
+  @override
+  String get settingsOpenAiApiKeyHelp =>
+      'Used for Whisper transcription (\$0.006/min). Key stored on this device only. Get one at platform.openai.com.';
+
+  @override
+  String get settingsOpenAiApiKeyDialogTitle => 'OpenAI API key';
+
+  @override
+  String get settingsOpenAiApiKeyDialogHint => 'Paste your sk-... key here';
+
+  @override
+  String get settingsOpenAiApiKeyClear => 'Remove';
+
+  @override
+  String get historyVoicePlay => 'Play recording';
+
+  @override
+  String get historyVoicePlaying => 'Playing…';
+
+  @override
+  String get historyVoicePause => 'Pause';
+
+  @override
+  String get historyVoiceFileGone => 'Audio file not found';
+
+  @override
+  String get timeCapsuleNotifTitle => 'Your time capsule has arrived 📬';
+
+  @override
+  String timeCapsuleNotifBody(String title) {
+    return 'A message from past you: $title';
+  }
+
+  @override
+  String get weeklyRadioTitle => 'Weekly AI Radio';
+
+  @override
+  String get weeklyRadioSubtitle =>
+      'Your week\'s voice diary, turned into a personal documentary.';
+
+  @override
+  String get weeklyRadioNoEntries => 'No recordings this week yet.';
+
+  @override
+  String get weeklyRadioPremiumArchive =>
+      'Premium plan keeps every episode forever.';
 }

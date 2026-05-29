@@ -24,14 +24,27 @@ class RoutingAiDiaryService implements AiDiaryService {
   final MockAiDiaryService _mock;
 
   AiGenerationOutcome? lastOutcome;
+  /// Populated only when the live Gemini call threw — the UI surfaces a
+  /// short prefix of this in the save SnackBar so beta testers can
+  /// report back exactly why we fell back to Mock.
+  String? lastErrorMessage;
 
-  /// Developer-owned shared key, injected at build time via:
-  ///   flutter build apk --dart-define=GEMINI_API_KEY=...
-  /// Empty when the build wasn't given a key (Mock will be used instead).
-  /// Long-term this moves behind a backend proxy so the key never ships
-  /// inside the APK, but for beta with a tiny tester pool this is enough.
-  String get _sharedApiKey =>
-      const String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+  /// Developer-owned shared key.
+  ///
+  /// First tries the build-time --dart-define (preferred when CI can inject
+  /// it cleanly), then falls back to the inline beta key so PowerShell quoting
+  /// bugs don't silently downgrade us to Mock.
+  ///
+  /// TODO(beta-end): remove the inline key and move behind a backend proxy
+  /// before public release. The repo is private, but a Gemini key inside an
+  /// APK is still reverse-engineerable.
+  static const _kInlineBetaGeminiKey =
+      'AIzaSyA9XpRl6psRNS82ovHdGlrqQY6ssck3E8s';
+  String get _sharedApiKey {
+    const fromEnv =
+        String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+    return fromEnv.isNotEmpty ? fromEnv : _kInlineBetaGeminiKey;
+  }
 
   @override
   Future<AiGenerationResult> generateDiary({
@@ -111,7 +124,11 @@ class RoutingAiDiaryService implements AiDiaryService {
     required String localeCode,
     String? voiceTranscript,
   }) async {
-    final gemini = GeminiAiDiaryService(apiKey: key);
+    final gemini = GeminiAiDiaryService(
+      apiKey: key,
+      proxyUrl: settings.proxyBaseUrl,
+      appToken: settings.appProxyToken,
+    );
     try {
       final r = await gemini.generateDiary(
         entry: entry,
@@ -120,9 +137,11 @@ class RoutingAiDiaryService implements AiDiaryService {
         voiceTranscript: voiceTranscript,
       );
       lastOutcome = AiGenerationOutcome.live;
+      lastErrorMessage = null;
       return r;
-    } catch (_) {
+    } catch (e) {
       lastOutcome = AiGenerationOutcome.fallback;
+      lastErrorMessage = e.toString();
       return _mock.generateDiary(
         entry: entry,
         personality: personality,

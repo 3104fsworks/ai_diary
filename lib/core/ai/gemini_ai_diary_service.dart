@@ -10,17 +10,36 @@ import 'prompt_builder.dart';
 
 /// Google Gemini implementation of [AiDiaryService].
 /// Uses the REST `generateContent` endpoint — no heavy SDK.
+///
+/// Supports two transport modes:
+///   • **Proxy mode** (production): set [proxyUrl] to your Cloudflare Workers
+///     URL. The worker holds the real API key; the app sends no key at all.
+///   • **Direct mode** (beta/BYOK): leave [proxyUrl] empty and supply [apiKey].
 class GeminiAiDiaryService implements AiDiaryService {
   GeminiAiDiaryService({
     required this.apiKey,
-    this.model = 'gemini-2.0-flash',
-    this.timeout = const Duration(seconds: 25),
+    // gemini-1.5-flash was retired for new API keys in Sept 2025 (404).
+    // gemini-2.0-flash had a tight per-project free-tier (429 on 2nd call).
+    // gemini-2.5-flash is the current default with the most generous free
+    // tier — switch back if it gets deprecated.
+    this.model = 'gemini-2.5-flash',
+    this.timeout = const Duration(seconds: 30),
+    this.proxyUrl = '',
+    this.appToken = '',
     http.Client? client,
   }) : _client = client ?? http.Client();
 
   final String apiKey;
   final String model;
   final Duration timeout;
+
+  /// Cloudflare Workers proxy base URL (e.g. https://ai-diary-proxy.you.workers.dev).
+  /// When non-empty, requests are routed through the proxy and [apiKey] is ignored.
+  final String proxyUrl;
+
+  /// Shared secret sent as `X-App-Token` when using the proxy.
+  final String appToken;
+
   final http.Client _client;
 
   static const _base = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -41,8 +60,8 @@ class GeminiAiDiaryService implements AiDiaryService {
       userVoiceTranscript: voiceTranscript,
     );
 
-    final uri = Uri.parse('$_base/$model:generateContent?key=$apiKey');
-    final body = jsonEncode({
+    // The Gemini request payload (same structure regardless of transport).
+    final geminiBody = {
       'systemInstruction': {
         'parts': [
           {'text': system},
@@ -59,7 +78,7 @@ class GeminiAiDiaryService implements AiDiaryService {
       'generationConfig': {
         'temperature': 0.6,
         'topP': 0.95,
-        'maxOutputTokens': 1500,
+        'maxOutputTokens': 2000,
       },
       'safetySettings': const [
         {'category': 'HARM_CATEGORY_HARASSMENT', 'threshold': 'BLOCK_ONLY_HIGH'},
@@ -67,15 +86,35 @@ class GeminiAiDiaryService implements AiDiaryService {
         {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'threshold': 'BLOCK_ONLY_HIGH'},
         {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'threshold': 'BLOCK_ONLY_HIGH'},
       ],
-    });
+    };
 
-    final res = await _client
-        .post(
-          uri,
-          headers: const {'Content-Type': 'application/json; charset=utf-8'},
-          body: body,
-        )
-        .timeout(timeout);
+    final http.Response res;
+    if (proxyUrl.isNotEmpty) {
+      // ── Proxy mode ─────────────────────────────────────────────────────────
+      // POST {proxyUrl}/gemini with JSON wrapper: { model, body: <geminiBody> }
+      final headers = <String, String>{
+        'Content-Type': 'application/json; charset=utf-8',
+      };
+      if (appToken.isNotEmpty) headers['X-App-Token'] = appToken;
+
+      res = await _client
+          .post(
+            Uri.parse('$proxyUrl/gemini'),
+            headers: headers,
+            body: jsonEncode({'model': model, 'body': geminiBody}),
+          )
+          .timeout(timeout);
+    } else {
+      // ── Direct mode (BYOK / inline key) ────────────────────────────────────
+      final uri = Uri.parse('$_base/$model:generateContent?key=$apiKey');
+      res = await _client
+          .post(
+            uri,
+            headers: const {'Content-Type': 'application/json; charset=utf-8'},
+            body: jsonEncode(geminiBody),
+          )
+          .timeout(timeout);
+    }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw GeminiException(
@@ -98,6 +137,9 @@ class GeminiAiDiaryService implements AiDiaryService {
       journal: parsed.journal,
       feedback: parsed.feedback,
       titleSuggestion: parsed.title,
+      journalEn: parsed.journalEn.isNotEmpty ? parsed.journalEn : null,
+      feedbackEn: parsed.feedbackEn.isNotEmpty ? parsed.feedbackEn : null,
+      radioIndex: parsed.radioIndex.isNotEmpty ? parsed.radioIndex : null,
     );
   }
 

@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 import 'app/app.dart';
 import 'app/app_settings.dart';
 import 'app/service_locator.dart';
+import 'core/notifications/diary_reminder_service.dart';
+import 'core/notifications/radio_notification_service.dart';
+import 'core/notifications/time_capsule_service.dart';
+import 'core/purchase/real_revenue_cat_purchase_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +18,40 @@ Future<void> main() async {
     settings: settings,
     firebaseReady: firebaseReady,
   );
+  await TimeCapsuleService.instance.init();    // also inits timezone data
+  await RadioNotificationService.instance.init();
+  await DiaryReminderService.instance.init();
+  await RadioNotificationService.instance.scheduleAll(
+    enabled: settings.radioNotificationsEnabled,
+  );
+  await DiaryReminderService.instance.scheduleDaily(
+    hour: settings.diaryReminderHour,
+    enabled: settings.diaryReminderEnabled,
+  );
+
+  // ── RevenueCat entitlement sync ─────────────────────────────────────────
+  // Reads from the SDK's disk cache — safe to call offline on every startup.
+  // Only runs on Android (Web uses MockPurchaseService).
+  if (!kIsWeb && services.purchase is RealRevenueCatPurchaseService) {
+    final purchaseSvc = services.purchase as RealRevenueCatPurchaseService;
+    try {
+      final active = await purchaseSvc.checkEntitlement();
+      // Sync the cached premium flag both ways: grant if active, revoke if lapsed.
+      // Exception: lifetimeFree / invite-code grants are independent keys and
+      // are NOT touched by setPremium().
+      await settings.setPremium(active);
+
+      // Listen for real-time changes while the app is running
+      // (e.g. subscription renewal, cancellation, billing retry).
+      await purchaseSvc.listenToEntitlementChanges((isActive) async {
+        await settings.setPremium(isActive);
+      });
+    } catch (e) {
+      // SDK not configured yet (Play Console not set up) — leave cached state.
+      debugPrint('[IAP] Entitlement sync skipped: $e');
+    }
+  }
+
   runApp(AiDiaryApp(settings: settings, services: services));
 }
 

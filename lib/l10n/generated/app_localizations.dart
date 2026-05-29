@@ -530,6 +530,12 @@ abstract class AppLocalizations {
   /// **'Skip'**
   String get tutorialSkip;
 
+  /// No description provided for @homeWeeklyRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly AI Radio'**
+  String get homeWeeklyRadio;
+
   /// No description provided for @homeViewPast.
   ///
   /// In en, this message translates to:
@@ -1316,6 +1322,18 @@ abstract class AppLocalizations {
   /// **'Restore purchases'**
   String get planRestore;
 
+  /// No description provided for @planRestoreSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchases restored successfully.'**
+  String get planRestoreSuccess;
+
+  /// No description provided for @planRestoreNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No active subscription found.'**
+  String get planRestoreNone;
+
   /// No description provided for @planPurchaseSuccess.
   ///
   /// In en, this message translates to:
@@ -1489,6 +1507,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Snowy'**
   String get weatherSnowy;
+
+  /// No description provided for @voiceRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'REC'**
+  String get voiceRecording;
+
+  /// No description provided for @voiceInitialising.
+  ///
+  /// In en, this message translates to:
+  /// **'Getting ready…'**
+  String get voiceInitialising;
+
+  /// No description provided for @voiceRecordingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Speak freely — up to 2 minutes.'**
+  String get voiceRecordingHint;
+
+  /// No description provided for @voiceTranscribing.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing…'**
+  String get voiceTranscribing;
+
+  /// No description provided for @voiceTranscribingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Whisper is turning your voice into text.\nJust a moment.'**
+  String get voiceTranscribingHint;
+
+  /// No description provided for @voiceNoApiKeyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenAI API key required'**
+  String get voiceNoApiKeyTitle;
+
+  /// No description provided for @voiceNoApiKeyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice input uses Whisper for transcription.\nGo to Settings → AI API → OpenAI API key.\n(Get a free key at platform.openai.com)'**
+  String get voiceNoApiKeyBody;
+
+  /// No description provided for @settingsOpenAiApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenAI API key (Whisper voice input)'**
+  String get settingsOpenAiApiKey;
+
+  /// No description provided for @settingsOpenAiApiKeyNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set — voice input unavailable'**
+  String get settingsOpenAiApiKeyNotSet;
+
+  /// No description provided for @settingsOpenAiApiKeyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Used for Whisper transcription (\$0.006/min). Key stored on this device only. Get one at platform.openai.com.'**
+  String get settingsOpenAiApiKeyHelp;
+
+  /// No description provided for @settingsOpenAiApiKeyDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenAI API key'**
+  String get settingsOpenAiApiKeyDialogTitle;
+
+  /// No description provided for @settingsOpenAiApiKeyDialogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste your sk-... key here'**
+  String get settingsOpenAiApiKeyDialogHint;
+
+  /// No description provided for @settingsOpenAiApiKeyClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get settingsOpenAiApiKeyClear;
+
+  /// No description provided for @historyVoicePlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play recording'**
+  String get historyVoicePlay;
+
+  /// No description provided for @historyVoicePlaying.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing…'**
+  String get historyVoicePlaying;
+
+  /// No description provided for @historyVoicePause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get historyVoicePause;
+
+  /// No description provided for @historyVoiceFileGone.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio file not found'**
+  String get historyVoiceFileGone;
+
+  /// No description provided for @timeCapsuleNotifTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your time capsule has arrived 📬'**
+  String get timeCapsuleNotifTitle;
+
+  /// No description provided for @timeCapsuleNotifBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A message from past you: {title}'**
+  String timeCapsuleNotifBody(String title);
+
+  /// No description provided for @weeklyRadioTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly AI Radio'**
+  String get weeklyRadioTitle;
+
+  /// No description provided for @weeklyRadioSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your week\'s voice diary, turned into a personal documentary.'**
+  String get weeklyRadioSubtitle;
+
+  /// No description provided for @weeklyRadioNoEntries.
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings this week yet.'**
+  String get weeklyRadioNoEntries;
+
+  /// No description provided for @weeklyRadioPremiumArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium plan keeps every episode forever.'**
+  String get weeklyRadioPremiumArchive;
 }
 
 class _AppLocalizationsDelegate
