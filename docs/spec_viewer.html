@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tsumug — 完全技術仕様書</title>
+  <style>
+    :root {
+      --bg: #0d0d14;
+      --surface: #15151f;
+      --surface2: #1c1c2a;
+      --text: #e2e2f0;
+      --muted: #8888aa;
+      --accent: #9b8cff;
+      --accent2: #6cf0c2;
+      --accent3: #f0a26c;
+      --border: #272738;
+      --code-bg: #111120;
+      --tag-bg: #1e1e30;
+      --sidebar-w: 260px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f4f4fa;
+        --surface: #ffffff;
+        --surface2: #eeeef8;
+        --text: #1a1a2e;
+        --muted: #666688;
+        --accent: #5e4fcc;
+        --accent2: #0d9e6e;
+        --accent3: #c05e10;
+        --border: #ddddf0;
+        --code-bg: #f0f0f8;
+        --tag-bg: #eaeaf8;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Segoe UI", sans-serif;
+      font-size: 15px;
+      line-height: 1.8;
+      display: flex;
+    }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      overflow-y: auto;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0 40px;
+    }
+    #sidebar .logo {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--accent);
+      padding: 0 20px 16px;
+      letter-spacing: -0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+    #sidebar .logo span { font-size: 11px; color: var(--muted); display: block; font-weight: 400; margin-top: 2px; }
+    #sidebar nav { padding: 12px 0; }
+    #sidebar nav a {
+      display: block;
+      padding: 5px 20px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: color .15s, background .15s;
+      border-left: 2px solid transparent;
+    }
+    #sidebar nav a:hover, #sidebar nav a.active {
+      color: var(--accent);
+      background: var(--tag-bg);
+      border-left-color: var(--accent);
+    }
+    #sidebar nav .section-header {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      padding: 14px 20px 4px;
+      opacity: 0.6;
+    }
+
+    /* ── MAIN ── */
+    #main {
+      flex: 1;
+      min-width: 0;
+      padding: 40px 48px 80px;
+      max-width: 900px;
+    }
+    .page-header {
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-header h1 {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: -1px;
+      margin-bottom: 4px;
+    }
+    .page-header .subtitle { color: var(--muted); font-size: 14px; }
+    .badge-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .badge {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: var(--tag-bg);
+    }
+    .badge.accent { border-color: var(--accent); color: var(--accent); }
+    .badge.green { border-color: var(--accent2); color: var(--accent2); }
+
+    /* ── SECTIONS ── */
+    section { margin-bottom: 56px; }
+    section h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 20px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    section h2 .num {
+      background: var(--accent);
+      color: #fff;
+      font-size: 12px;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 24px 0 10px;
+      padding-left: 10px;
+      border-left: 3px solid var(--accent);
+    }
+    p { margin-bottom: 12px; color: var(--text); }
+    ul, ol { margin: 8px 0 12px 24px; }
+    li { margin-bottom: 4px; }
+
+    /* ── TABLES ── */
+    .table-wrap { overflow-x: auto; margin: 16px 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13.5px;
+    }
+    thead th {
+      background: var(--surface2);
+      color: var(--accent);
+      font-weight: 600;
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tbody tr:hover { background: var(--tag-bg); }
+    code.inline {
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 12.5px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--accent2);
+    }
+    .check-y { color: #4cdb90; font-weight: 700; }
+    .check-n { color: #f06060; font-weight: 700; }
+
+    /* ── CODE BLOCKS ── */
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      margin: 16px 0;
+      font-size: 12.5px;
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      line-height: 1.7;
+    }
+    pre code { background: none; border: none; padding: 0; color: var(--text); }
+
+    /* ── CALLOUTS ── */
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: var(--surface2);
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+      font-size: 13.5px;
+    }
+    .callout.warn { border-left-color: var(--accent3); }
+    .callout.ok { border-left-color: var(--accent2); }
+    .callout-title { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; color: var(--accent); }
+    .callout.warn .callout-title { color: var(--accent3); }
+    .callout.ok .callout-title { color: var(--accent2); }
+
+    /* ── ARCH DIAGRAM ── */
+    .arch-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 16px 0;
+      font-size: 13px;
+      font-family: "SF Mono", monospace;
+    }
+    .arch-layer {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .arch-layer:last-child { border-bottom: none; }
+    .arch-label { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; width: 80px; flex-shrink: 0; }
+    .arch-items { color: var(--muted); font-size: 12.5px; }
+    .l-features { background: #1a1a30; }
+    .l-app { background: #161624; }
+    .l-core { background: #131320; }
+    .l-data { background: #100f1e; }
+    .l-features .arch-label { color: #a0e0ff; }
+    .l-app .arch-label { color: var(--accent); }
+    .l-core .arch-label { color: var(--accent2); }
+    .l-data .arch-label { color: var(--accent3); }
+
+    /* ── PRIORITY FLOW ── */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 12px 0;
+    }
+    .flow-step {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12.5px;
+    }
+    .flow-arrow { color: var(--muted); font-size: 16px; }
+
+    /* ── GRID CARDS ── */
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
+    .card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .card .card-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+    .card .card-body { font-size: 12.5px; color: var(--muted); }
+
+    /* ── PRINT ── */
+    @media print {
+      #sidebar { display: none; }
+      body { display: block; }
+      #main { max-width: 100%; padding: 20px; }
+    }
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      #main { padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ───────── SIDEBAR ───────── -->
+<nav id="sidebar">
+  <div class="logo">Tsumug<span>完全技術仕様書 v1.0-beta</span></div>
+  <nav>
+    <div class="section-header">基本情報</div>
+    <a href="#s1">1. プロジェクト概要</a>
+    <a href="#s2">2. 技術スタック</a>
+    <a href="#s3">3. アーキテクチャ</a>
+    <a href="#s4">4. ファイル構造</a>
+    <div class="section-header">データ・画面</div>
+    <a href="#s5">5. データモデル</a>
+    <a href="#s6">6. 画面・ナビゲーション</a>
+    <div class="section-header">機能仕様</div>
+    <a href="#s7">7. 機能仕様</a>
+    <a href="#s8">8. AIプロンプト仕様</a>
+    <a href="#s9">9. 通知仕様</a>
+    <div class="section-header">バックエンド・課金</div>
+    <a href="#s10">10. RevenueCat課金</a>
+    <a href="#s11">11. Cloudflareプロキシ</a>
+    <a href="#s12">12. ローカルストレージ</a>
+    <a href="#s13">13. Markdownエクスポート</a>
+    <div class="section-header">設定・ビルド</div>
+    <a href="#s14">14. SharedPreferences</a>
+    <a href="#s15">15. Androidビルド設定</a>
+    <a href="#s16">16. プレミアム機能ゲート</a>
+    <a href="#s17">17. ローカライゼーション</a>
+    <a href="#appendix">付録: Play Store</a>
+  </nav>
+</nav>
+
+<!-- ───────── MAIN ───────── -->
+<main id="main">
+
+  <div class="page-header">
+    <h1>Tsumug</h1>
+    <div class="subtitle">AI Voice Journal, Radio — 完全技術仕様書</div>
+    <div class="badge-row">
+      <span class="badge accent">v1.0-beta</span>
+      <span class="badge">Flutter 3.44.0 / Dart 3.12</span>
+      <span class="badge">Android（主）</span>
+      <span class="badge green">最終更新: 2026-05-29</span>
+      <span class="badge">com.aidiary.app</span>
+    </div>
+  </div>
+
+  <!-- ─── 1 ─── -->
+  <section id="s1">
+    <h2><span class="num">1</span>プロジェクト概要</h2>
+    <div class="callout ok">
+      <div class="callout-title">コンセプト</div>
+      「話すだけで今日が日記になる」——声で日記を記録し、AIが整形。週末には蓄積された日記からAIラジオ番組を自動生成するパーソナルな日記アプリ。
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>項目</th><th>値</th></tr></thead>
+      <tbody>
+        <tr><td>アプリ名（日本）</td><td>Tsumug（ツムグ）</td></tr>
+        <tr><td>アプリ名（海外）</td><td>AI Voice Journal, Radio</td></tr>
+        <tr><td>パッケージ名</td><td><code class="inline">com.aidiary.app</code></td></tr>
+        <tr><td>プラットフォーム</td><td>Android（主）、iOS（予定）</td></tr>
+        <tr><td>最小SDK</td><td>Android 21（Android 5.0）</td></tr>
+        <tr><td>対象SDK</td><td>Android 35</td></tr>
+        <tr><td>言語</td><td>日本語（デフォルト）、英語</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─── 2 ─── -->
+  <section id="s2">
+    <h2><span class="num">2</span>技術スタック</h2>
+    <h3>Flutter / Dart</h3>
+    <div class="card-grid">
+      <div class="card"><div class="card-title">Flutter</div><div class="card-body">3.44.0</div></div>
+      <div class="card"><div class="card-title">Dart</div><div class="card-body">3.12</div></div>
+      <div class="card"><div class="card-title">Min SDK Android</div><div class="card-body">API 21</div></div>
+    </div>
+
+    <h3>主要パッケージ</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>パッケージ</th><th>バージョン</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">go_router</code></td><td>^14.6.1</td><td>画面ルーティング</td></tr>
+        <tr><td><code class="inline">shared_preferences</code></td><td>^2.3.3</td><td>設定値永続化</td></tr>
+        <tr><td><code class="inline">path_provider</code></td><td>^2.1.5</td><td>ファイルパス取得</td></tr>
+        <tr><td><code class="inline">record</code></td><td>^7.0.0</td><td>音声録音（.m4a）</td></tr>
+        <tr><td><code class="inline">audioplayers</code></td><td>^6.0.0</td><td>音声再生（ラジオ）</td></tr>
+        <tr><td><code class="inline">purchases_flutter</code></td><td>^8.0.0</td><td>RevenueCat課金</td></tr>
+        <tr><td><code class="inline">flutter_local_notifications</code></td><td>^18.0.0</td><td>ローカル通知</td></tr>
+        <tr><td><code class="inline">http</code></td><td>^1.2.2</td><td>HTTP通信</td></tr>
+        <tr><td><code class="inline">geolocator</code></td><td>^13.0.2</td><td>GPS位置情報</td></tr>
+        <tr><td><code class="inline">health</code></td><td>^13.0.1</td><td>Health Connect</td></tr>
+        <tr><td><code class="inline">firebase_core</code></td><td>^3.6.0</td><td>Firebase（オプション）</td></tr>
+        <tr><td><code class="inline">image_picker</code></td><td>^1.1.2</td><td>写真ピッカー</td></tr>
+        <tr><td><code class="inline">share_plus</code></td><td>^10.1.2</td><td>OS共有シート</td></tr>
+        <tr><td><code class="inline">permission_handler</code></td><td>^11.3.1</td><td>権限管理</td></tr>
+        <tr><td><code class="inline">crypto</code></td><td>^3.0.6</td><td>タイムカプセルID生成</td></tr>
+        <tr><td><code class="inline">archive</code></td><td>^3.6.1</td><td>ZIP圧縮（MDエクスポート）</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>外部API</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>API</th><th>エンドポイント</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td>OpenAI Whisper</td><td><code class="inline">POST .../v1/audio/transcriptions</code></td><td>音声→テキスト</td></tr>
+        <tr><td>Google Gemini 2.5 Flash</td><td><code class="inline">POST .../gemini-2.5-flash:generateContent</code></td><td>日記生成AI</td></tr>
+        <tr><td>RevenueCat</td><td>SDK経由</td><td>サブスクリプション管理</td></tr>
+        <tr><td>Google Calendar API</td><td>SDK経由</td><td>カレンダー連携（読み取り専用）</td></tr>
+        <tr><td>Health Connect</td><td>Android SDK</td><td>歩数・睡眠取得</td></tr>
+        <tr><td>Cloudflare Workers</td><td>カスタムURL</td><td>APIキープロキシ（本番）</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─── 3 ─── -->
+  <section id="s3">
+    <h2><span class="num">3</span>アーキテクチャ</h2>
+    <h3>設計原則</h3>
+    <ul>
+      <li><strong>ローカルファースト:</strong> 全データを端末内JSONファイルに保存。クラウド同期なし。</li>
+      <li><strong>ServiceLocator:</strong> <code class="inline">ServiceLocator</code>クラスで依存関係を1箇所管理。</li>
+      <li><strong>InheritedWidget:</strong> サービスと設定をWidget Treeに注入。</li>
+      <li><strong>Mock/Real切り替え:</strong> 各サービスにMock実装。Firebase未設定/Web環境ではMock使用。</li>
+    </ul>
+    <h3>レイヤー構成</h3>
+    <div class="arch-box">
+      <div class="arch-layer l-features">
+        <div class="arch-label">features/</div>
+        <div class="arch-items">UI Screens + Widgets（diary, history, home, settings, onboarding）</div>
+      </div>
+      <div class="arch-layer l-app">
+        <div class="arch-label">app/</div>
+        <div class="arch-items">Router, ServiceLocator, AppSettings, Theme</div>
+      </div>
+      <div class="arch-layer l-core">
+        <div class="arch-label">core/</div>
+        <div class="arch-items">Services — AI, Audio, Notifications, Purchase, Auth, Calendar, Health, Location, Export</div>
+      </div>
+      <div class="arch-layer l-data">
+        <div class="arch-label">data/</div>
+        <div class="arch-items">Models, Repositories（Local JSON + Memory implementations）</div>
+      </div>
+    </div>
+
+    <h3>起動フロー（main.dart）</h3>
+    <pre><code>1. WidgetsFlutterBinding.ensureInitialized()
+2. AppSettings.load()              → SharedPreferences 読み込み
+3. _initFirebase()                 → Firebase初期化（失敗時はMockにフォールバック）
+4. ServiceLocator.bootstrap()      → 全サービス初期化
+5. TimeCapsuleService.init()       → タイムゾーンデータ初期化
+6. RadioNotificationService.init() + scheduleAll()
+7. DiaryReminderService.init()     + scheduleDaily()
+8. RevenueCat entitlement sync     → checkEntitlement() + listener登録
+9. runApp(AiDiaryApp)</code></pre>
+
+    <h3>ServiceLocatorが管理するサービス</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>フィールド</th><th>型</th><th>実装</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">diary</code></td><td>DiaryRepository</td><td>LocalDiaryRepository</td></tr>
+        <tr><td><code class="inline">timeline</code></td><td>TimelineRepository</td><td>LocalTimelineRepository</td></tr>
+        <tr><td><code class="inline">ai</code></td><td>RoutingAiDiaryService</td><td>BYOK/Premium/Freeルーティング</td></tr>
+        <tr><td><code class="inline">health</code></td><td>HealthService</td><td>RealHealthService（Health Connect）</td></tr>
+        <tr><td><code class="inline">calendar</code></td><td>CalendarService</td><td>RealGoogleCalendarService</td></tr>
+        <tr><td><code class="inline">auth</code></td><td>AuthService</td><td>RealFirebaseAuthService</td></tr>
+        <tr><td><code class="inline">purchase</code></td><td>PurchaseService</td><td>RealRevenueCatPurchaseService</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─── 4 ─── -->
+  <section id="s4">
+    <h2><span class="num">4</span>ファイル構造</h2>
+    <pre><code>ai_diary/
+├── lib/
+│   ├── main.dart
+│   ├── app/
+│   │   ├── app.dart                        # AiDiaryApp（root widget）
+│   │   ├── app_settings.dart               # SharedPrefs全設定（ChangeNotifier）
+│   │   ├── service_locator.dart            # DI container
+│   │   ├── router/app_router.dart          # GoRouter設定・全ルート定義
+│   │   └── theme/                          # カラー・TextTheme・ThemeData
+│   ├── core/
+│   │   ├── ai/
+│   │   │   ├── gemini_ai_diary_service.dart    # Gemini REST実装
+│   │   │   ├── routing_ai_diary_service.dart   # BYOK/Premium/Freeルーティング
+│   │   │   ├── whisper_transcription_service.dart
+│   │   │   ├── prompt_builder.dart             # プロンプト構築・レスポンス解析
+│   │   │   └── radio_script_service.dart       # ラジオスクリプト生成
+│   │   ├── audio/                          # TTS・音声クリーンアップ
+│   │   ├── auth/                           # Firebase Auth
+│   │   ├── calendar/                       # Google Calendar
+│   │   ├── export/                         # Markdown・SNS画像エクスポート
+│   │   ├── health/                         # Health Connect
+│   │   ├── notifications/                  # 日記リマインダー・ラジオ・タイムカプセル
+│   │   ├── purchase/                       # RevenueCat
+│   │   └── tasks/                          # Google Tasks
+│   ├── data/
+│   │   ├── models/                         # DiaryEntry, VoiceMetadata, RadioEpisode...
+│   │   ├── repositories/                   # 抽象インターフェース
+│   │   └── sources/
+│   │       ├── local/                      # JSONファイルベース実装
+│   │       └── memory/                     # インメモリ実装（Web/テスト）
+│   ├── features/
+│   │   ├── diary/                          # 日記作成・音声録音
+│   │   ├── history/                        # 日記一覧・詳細
+│   │   ├── home/                           # カレンダー・ラジオ一覧・プレイヤー
+│   │   ├── onboarding/                     # スプラッシュ・言語選択・チュートリアル
+│   │   └── settings/                       # 設定・プラン・目標
+│   └── l10n/                               # app_ja.arb / app_en.arb
+├── android/
+│   └── app/src/main/AndroidManifest.xml
+├── cloudflare/
+│   ├── worker.js                           # Cloudflare Workers プロキシ
+│   └── wrangler.toml
+├── docs/
+│   ├── privacy_policy.html                 # GitHub Pages公開
+│   └── play_console_listing.md
+└── assets/icon/
+    ├── app_icon.png                        # 1024×1024 マスター
+    ├── play_store_icon_512.png             # Play Store用 512×512
+    └── play_store_feature_graphic.png      # 1024×500</code></pre>
+  </section>
+
+  <!-- ─── 5 ─── -->
+  <section id="s5">
+    <h2><span class="num">5</span>データモデル</h2>
+    <h3>DiaryEntry（日記エントリ）</h3>
+    <pre><code>class DiaryEntry {
+  final String id;                    // UUID (date-based)
+  final DateTime date;
+  final String? aiTitle;              // AIタイトル（10〜20字）
+  final String userMemo;              // ユーザー手入力テキスト
+  final String rawVoiceMemo;          // 音声文字起こし原文（AI編集禁止）
+  final String? aiJournal;            // AI生成日記本文（日本語・一人称）
+  final String? aiJournalEn;          // 英語要約（3〜4文・ラジオ用）
+  final String? aiFeedback;           // AI一言コメント（日本語）
+  final String? aiFeedbackEn;         // 英語コメント
+  final String? aiRadioIndex;         // ラジオインデックス（英語・2行）
+  final List&lt;String&gt; photoPaths;
+  final List&lt;GoalItem&gt; goals;
+  final WeatherInfo? weather;
+  final ActivityInfo? activity;       // 歩数・睡眠時間
+  final List&lt;ScheduleItem&gt; schedule;
+  final List&lt;String&gt; doneTasks;
+  final List&lt;TimelineStop&gt; timeline;
+  final String? audioFilePath;        // .m4a（最大120秒）
+  final DateTime? capsuleDeliveryDate;// タイムカプセル配信日時
+  final VoiceMetadata? voiceMetadata;
+}</code></pre>
+
+    <h3>VoiceMetadata（音声特性）</h3>
+    <pre><code>class VoiceMetadata {
+  final double averageAmplitude;    // 平均振幅 0.0〜1.0
+  final double silenceRatio;        // 無音率 0.0〜1.0（閾値: 0.15）
+  final int totalDurationSeconds;   // 録音秒数
+  final double emotionTemperature;  // 感情温度
+}
+
+// 感情温度 = (avgAmplitude × 0.7) + ((1.0 - silenceRatio) × 0.3)</code></pre>
+
+    <h3>RadioEpisode</h3>
+    <pre><code>class RadioEpisode {
+  final String id;              // "weekly_2026-05-25" / "monthly_2026-05-31"
+  final DateTime generatedAt;
+  final RadioEpisodeType type;  // weekly(目標180秒) / monthly(目標300秒)
+  final String script;          // AIナレーションスクリプト
+  final String audioFilePath;   // TTS生成音声ファイルパス
+}</code></pre>
+
+    <h3>AiGenerationResult</h3>
+    <pre><code>class AiGenerationResult {
+  final String journal;           // 日本語日記本文（必須）
+  final String feedback;          // 日本語コメント（必須）
+  final String? titleSuggestion;  // タイトル案
+  final String? journalEn;        // 英語要約
+  final String? feedbackEn;       // 英語コメント
+  final String? radioIndex;       // ラジオインデックス
+}</code></pre>
+  </section>
+
+  <!-- ─── 6 ─── -->
+  <section id="s6">
+    <h2><span class="num">6</span>画面仕様・ナビゲーション</h2>
+    <h3>ルート一覧（GoRouter）</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>ルート</th><th>画面</th><th>備考</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">/splash</code></td><td>SplashScreen</td><td>初回起動判定</td></tr>
+        <tr><td><code class="inline">/language</code></td><td>LanguageSelectScreen</td><td>初回のみ</td></tr>
+        <tr><td><code class="inline">/survey</code></td><td>SurveyScreen</td><td>初回アンケート</td></tr>
+        <tr><td><code class="inline">/tutorial</code></td><td>TutorialScreen</td><td>4ページ（最後: 通知許可）</td></tr>
+        <tr><td><code class="inline">/login</code></td><td>LoginScreen</td><td>Google/Appleサインイン</td></tr>
+        <tr><td><code class="inline">/home</code></td><td>HomeScreen</td><td>メイン（カレンダー）</td></tr>
+        <tr><td><code class="inline">/diary</code></td><td>DiaryEditScreen</td><td>日記作成・編集</td></tr>
+        <tr><td><code class="inline">/history</code></td><td>HistoryListScreen</td><td>日記一覧</td></tr>
+        <tr><td><code class="inline">/history/:date</code></td><td>HistoryDetailScreen</td><td>日記詳細</td></tr>
+        <tr><td><code class="inline">/weekly-radio</code></td><td>WeeklyRadioScreen</td><td>AIラジオ一覧</td></tr>
+        <tr><td><code class="inline">/weekly-radio/player</code></td><td>RadioPlayerScreen</td><td>ラジオプレイヤー</td></tr>
+        <tr><td><code class="inline">/settings</code></td><td>SettingsScreen</td><td>設定メイン</td></tr>
+        <tr><td><code class="inline">/settings/custom</code></td><td>CustomSettingsScreen</td><td>APIキー・プロキシ</td></tr>
+        <tr><td><code class="inline">/settings/goals</code></td><td>GoalsScreen</td><td>目標設定</td></tr>
+        <tr><td><code class="inline">/plan</code></td><td>PlanScreen</td><td>プラン・課金</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>ナビゲーションフロー</h3>
+    <div class="flow">
+      <div class="flow-step">起動</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">onboardingDone?</div>
+      <div class="flow-arrow">No →</div>
+      <div class="flow-step">/language</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">/survey</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">/tutorial（4p）</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">/home</div>
+    </div>
+  </section>
+
+  <!-- ─── 7 ─── -->
+  <section id="s7">
+    <h2><span class="num">7</span>機能仕様</h2>
+
+    <h3>7-1. 音声録音・文字起こし</h3>
+    <ul>
+      <li><strong>最大録音時間:</strong> 120秒（2分）、フォーマット: .m4a（AAC-LC）</li>
+      <li><strong>サンプリング間隔:</strong> 500ms（振幅サンプリング）</li>
+      <li><strong>言語コード:</strong> BCP-47 → ISO-639-1変換（<code class="inline">ja-JP</code> → <code class="inline">ja</code>）</li>
+    </ul>
+    <pre><code>直接モード（デフォルト）:
+  POST https://api.openai.com/v1/audio/transcriptions
+  Authorization: Bearer {apiKey}
+  Body: file={audioFile}, model=whisper-1, language=ja, response_format=text
+
+プロキシモード（proxyUrl設定時）:
+  POST {proxyUrl}/whisper
+  X-App-Token: {appToken}
+  同じBody</code></pre>
+
+    <h3>7-2. AI日記生成（APIキー優先度）</h3>
+    <div class="flow">
+      <div class="flow-step">優先1: BYOK<br><small>無制限・選択パーソナリティ</small></div>
+      <div class="flow-arrow">→失敗</div>
+      <div class="flow-step">優先2: Premium<br><small>共有キー</small></div>
+      <div class="flow-arrow">→失敗</div>
+      <div class="flow-step">優先3: Free<br><small>1日1回・Standard固定</small></div>
+      <div class="flow-arrow">→失敗</div>
+      <div class="flow-step">Mock<br><small>フォールバック</small></div>
+    </div>
+
+    <h3>7-3. Gemini パラメータ</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>パラメータ</th><th>値</th></tr></thead>
+      <tbody>
+        <tr><td>モデル</td><td>gemini-2.5-flash</td></tr>
+        <tr><td>temperature</td><td>0.6</td></tr>
+        <tr><td>topP</td><td>0.95</td></tr>
+        <tr><td>maxOutputTokens</td><td>2000</td></tr>
+        <tr><td>timeout</td><td>30秒</td></tr>
+        <tr><td>安全設定</td><td>BLOCK_ONLY_HIGH（全カテゴリ）</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>7-4. ライフログ自動連携</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>データ種別</th><th>取得元</th><th>権限</th></tr></thead>
+      <tbody>
+        <tr><td>天気</td><td>OpenWeatherMap / 端末位置</td><td>ACCESS_COARSE_LOCATION</td></tr>
+        <tr><td>歩数</td><td>Health Connect</td><td>health.READ_STEPS</td></tr>
+        <tr><td>睡眠</td><td>Health Connect</td><td>health.READ_SLEEP</td></tr>
+        <tr><td>カレンダー</td><td>Google Calendar API</td><td>Calendar.readonly</td></tr>
+        <tr><td>タスク</td><td>Google Tasks API</td><td>Tasks.readonly</td></tr>
+        <tr><td>位置タイムライン</td><td>Geolocator</td><td>ACCESS_FINE_LOCATION</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>7-5. AIラジオ生成フロー</h3>
+    <pre><code>1. WeeklySummaryRepository から対象期間の日記を取得
+2. 各日記の aiRadioIndex（英語・軽量）を優先使用
+   └ なければ aiJournalEn（英語要約）を使用
+3. Gemini にラジオスクリプト生成を依頼
+4. TTS で音声化 → RadioEpisode として保存
+
+週間: 毎週日曜 21:00（目標180秒）
+月間: 毎月末日 21:00（目標300秒）</code></pre>
+  </section>
+
+  <!-- ─── 8 ─── -->
+  <section id="s8">
+    <h2><span class="num">8</span>AIプロンプト仕様</h2>
+    <h3>システムプロンプト構成（3部構成）</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>パート</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>Part 1: _basePrompt</td><td>ロール定義・6セクション出力規則・フォーマット指定</td></tr>
+        <tr><td>Part 2: _emotionSyncClause</td><td>感情状態に応じた対応（優先度最高）</td></tr>
+        <tr><td>Part 3: _personalityClause</td><td>Standard / Mirror / Friendly のトーン定義</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>出力セクション（6セクション固定）</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>セクション</th><th>言語</th><th>内容</th><th>文字数目安</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">## Title</code></td><td>日本語</td><td>体言止め1行</td><td>10〜20字</td></tr>
+        <tr><td><code class="inline">## Journal</code></td><td>日本語</td><td>一人称日記本文</td><td>300〜500字</td></tr>
+        <tr><td><code class="inline">## Journal EN</code></td><td>英語</td><td>日記要約</td><td>3〜4文</td></tr>
+        <tr><td><code class="inline">## AI Feedback JP</code></td><td>日本語</td><td>労いコメント</td><td>1〜2文</td></tr>
+        <tr><td><code class="inline">## AI Feedback EN</code></td><td>英語</td><td>同上翻訳</td><td>1〜2文</td></tr>
+        <tr><td><code class="inline">## Radio Index</code></td><td>英語</td><td>ラジオ用超軽量インデックス</td><td>2行固定</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout">
+      <div class="callout-title">Radio Indexフォーマット（厳守）</div>
+      <code>- **Core Action:** [今日の出来事を英語2文以内で要約]<br>
+      - **AI Sentiment:** [心理状態を英語キーワード2つ e.g. Focused calm, quiet satisfaction]</code>
+    </div>
+  </section>
+
+  <!-- ─── 9 ─── -->
+  <section id="s9">
+    <h2><span class="num">9</span>通知仕様</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>チャンネルID</th><th>通知ID</th><th>用途</th><th>タイミング</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">diary_reminder</code></td><td>1000</td><td>日記リマインダー</td><td>毎日21:00（設定変更可）</td></tr>
+        <tr><td><code class="inline">ai_radio</code></td><td>2000 / 2001</td><td>ラジオ番組通知</td><td>週: 毎週日曜21:00 / 月: 毎月末日21:00</td></tr>
+        <tr><td><code class="inline">time_capsule</code></td><td>ハッシュ</td><td>タイムカプセル</td><td>capsuleDeliveryDate 指定日時</td></tr>
+      </tbody>
+    </table></div>
+    <h3>必要権限</h3>
+    <ul>
+      <li>Android 13+: <code class="inline">POST_NOTIFICATIONS</code>（実行時許可）</li>
+      <li><code class="inline">SCHEDULE_EXACT_ALARM</code> + <code class="inline">USE_EXACT_ALARM</code></li>
+      <li><code class="inline">RECEIVE_BOOT_COMPLETED</code>（ブート後再スケジュール）</li>
+    </ul>
+  </section>
+
+  <!-- ─── 10 ─── -->
+  <section id="s10">
+    <h2><span class="num">10</span>課金仕様（RevenueCat）</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>商品ID</th><th>名前</th><th>価格</th><th>機能</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">ai_journal_voice_monthly</code></td><td>音声入力プラン</td><td>¥300/月</td><td>音声日記・広告非表示</td></tr>
+        <tr><td><code class="inline">ai_journal_voice_photo_monthly</code></td><td>音声+写真プラン</td><td>¥500/月</td><td>上記+写真機能</td></tr>
+        <tr><td><code class="inline">ai_journal_full_monthly</code></td><td>フル機能プラン</td><td>¥1,000/月</td><td>全機能・パーソナリティ選択</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout warn">
+      <div class="callout-title">設定値</div>
+      Android API Key: <code class="inline">goog_SdOhXOfTWeGKAUGNiJxHqFYnKKu</code><br>
+      エンタイトルメントID: <code class="inline">premium</code>
+    </div>
+    <h3>isPremium判定ロジック</h3>
+    <pre><code>bool get isPremium {
+  if (_manualPremium) return true;   // RevenueCat同期値
+  if (lifetimeFree) return true;     // 招待コード（永久）
+  final until = premiumUntil;
+  if (until != null && until.isAfter(DateTime.now())) return true;
+  return false;
+}</code></pre>
+  </section>
+
+  <!-- ─── 11 ─── -->
+  <section id="s11">
+    <h2><span class="num">11</span>Cloudflare Workers プロキシ仕様</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>メソッド</th><th>パス</th><th>機能</th></tr></thead>
+      <tbody>
+        <tr><td>POST</td><td><code class="inline">/whisper</code></td><td>OpenAI Whisper APIへ転送（multipart）</td></tr>
+        <tr><td>POST</td><td><code class="inline">/gemini</code></td><td>Google Gemini APIへ転送（JSON）</td></tr>
+        <tr><td>OPTIONS</td><td><code class="inline">/*</code></td><td>CORS preflight</td></tr>
+      </tbody>
+    </table></div>
+    <h3>認証</h3>
+    <p>リクエストヘッダー: <code class="inline">X-App-Token: {APP_TOKEN}</code> — Worker側でシークレット <code class="inline">APP_TOKEN</code> と照合（未設定時は検証スキップ）</p>
+    <h3>デプロイコマンド</h3>
+    <pre><code>npm install -g wrangler
+wrangler login
+cd cloudflare
+wrangler secret put OPENAI_API_KEY
+wrangler secret put GEMINI_API_KEY
+wrangler secret put APP_TOKEN
+wrangler deploy
+# → https://ai-diary-proxy.{subdomain}.workers.dev</code></pre>
+  </section>
+
+  <!-- ─── 12 ─── -->
+  <section id="s12">
+    <h2><span class="num">12</span>ローカルストレージ仕様</h2>
+    <pre><code>{documentsDir}/
+├── diary/
+│   └── {YYYY-MM-DD}.json      # 1日記 = 1ファイル
+├── timeline/
+│   └── timeline.json          # 位置タイムライン配列
+├── radio/
+│   └── episodes.json          # RadioEpisode配列
+└── recordings/
+    └── {timestamp}.m4a        # 音声録音ファイル</code></pre>
+    <div class="callout">
+      <div class="callout-title">音声ファイル自動削除（AudioCleanupService）</div>
+      無料ユーザー: 7日以上前の .m4a を削除 / プレミアムユーザー: 削除しない<br>
+      実行タイミング: 毎回アプリ起動時
+    </div>
+  </section>
+
+  <!-- ─── 13 ─── -->
+  <section id="s13">
+    <h2><span class="num">13</span>Markdownエクスポート仕様</h2>
+    <h3>BulkMarkdownExporter</h3>
+    <p>全日記エントリをZIP圧縮してOS共有シートで出力。<br>出力ファイル名: <code class="inline">ai_diary_{YYYYMMDD}.zip</code></p>
+    <h3>YAML Frontmatterフィールド</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>フィールド</th><th>型</th><th>算出方法</th></tr></thead>
+      <tbody>
+        <tr><td>date</td><td>String</td><td>YYYY-MM-DD</td></tr>
+        <tr><td>weather</td><td>String</td><td>{emoji} {tempC}°C {place}</td></tr>
+        <tr><td>steps</td><td>int</td><td>activity.steps</td></tr>
+        <tr><td>sleep_duration</td><td>String</td><td>"HH:MM"形式</td></tr>
+        <tr><td>sleep_quality</td><td>String</td><td>Good(&gt;7h) / Fair(5-7h) / Poor(&lt;5h)</td></tr>
+        <tr><td>energy_level</td><td>int</td><td>emotionTemperature × 100</td></tr>
+        <tr><td>stress_level</td><td>int</td><td>(100 - energy) × 0.7</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─── 14 ─── -->
+  <section id="s14">
+    <h2><span class="num">14</span>設定値一覧（SharedPreferences）</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>キー</th><th>型</th><th>デフォルト</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">theme_mode</code></td><td>String</td><td>system</td><td>light/dark/system</td></tr>
+        <tr><td><code class="inline">ai_personality</code></td><td>String</td><td>standard</td><td>standard/mirror/friendly</td></tr>
+        <tr><td><code class="inline">onboarding_done</code></td><td>bool</td><td>false</td><td>オンボーディング完了</td></tr>
+        <tr><td><code class="inline">gemini_api_key</code></td><td>String</td><td>""</td><td>ユーザーBYOK Gemini APIキー</td></tr>
+        <tr><td><code class="inline">openai_api_key</code></td><td>String</td><td>""</td><td>ユーザーBYOK OpenAI APIキー</td></tr>
+        <tr><td><code class="inline">proxy_base_url</code></td><td>String</td><td>""</td><td>Cloudflare Workers URL</td></tr>
+        <tr><td><code class="inline">app_proxy_token</code></td><td>String</td><td>""</td><td>プロキシ認証トークン</td></tr>
+        <tr><td><code class="inline">is_premium</code></td><td>bool</td><td>false</td><td>RevenueCat同期プレミアムフラグ</td></tr>
+        <tr><td><code class="inline">lifetime_free</code></td><td>bool</td><td>false</td><td>招待コード永久フラグ</td></tr>
+        <tr><td><code class="inline">diary_reminder_enabled</code></td><td>bool</td><td>false</td><td>日記リマインダー有効</td></tr>
+        <tr><td><code class="inline">diary_reminder_hour</code></td><td>int</td><td>21</td><td>リマインダー時刻（0-23）</td></tr>
+        <tr><td><code class="inline">radio_notifications_enabled</code></td><td>bool</td><td>true</td><td>ラジオ通知有効</td></tr>
+        <tr><td><code class="inline">location_enabled</code></td><td>bool</td><td>false</td><td>位置情報ライフログ</td></tr>
+        <tr><td><code class="inline">health_enabled</code></td><td>bool</td><td>false</td><td>ヘルスデータ連携</td></tr>
+        <tr><td><code class="inline">calendar_enabled</code></td><td>bool</td><td>false</td><td>カレンダー連携</td></tr>
+        <tr><td><code class="inline">last_free_generation_date</code></td><td>String</td><td>null</td><td>無料生成最終利用日</td></tr>
+        <tr><td><code class="inline">font_scale</code></td><td>double</td><td>1.0</td><td>文字スケール（0.9/1.0/1.15/1.3）</td></tr>
+        <tr><td><code class="inline">locale_override</code></td><td>String</td><td>null</td><td>言語上書き（ja/en）</td></tr>
+        <tr><td><code class="inline">custom_goals</code></td><td>String</td><td>"[]"</td><td>目標リスト（JSON配列）</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─── 15 ─── -->
+  <section id="s15">
+    <h2><span class="num">15</span>Androidビルド設定</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>項目</th><th>値</th></tr></thead>
+      <tbody>
+        <tr><td>namespace / applicationId</td><td><code class="inline">com.aidiary.app</code></td></tr>
+        <tr><td>minSdk</td><td>21</td></tr>
+        <tr><td>targetSdk / compileSdk</td><td>35</td></tr>
+        <tr><td>Gradle</td><td>9.4.1</td></tr>
+        <tr><td>AGP（Android Gradle Plugin）</td><td>9.2.1</td></tr>
+        <tr><td>Kotlin</td><td>2.3.20</td></tr>
+      </tbody>
+    </table></div>
+    <h3>リリースビルドコマンド（Windows）</h3>
+    <pre><code>$env:JAVA_TOOL_OPTIONS = "-Djava.nio.channels.spi.SelectorProvider=sun.nio.ch.WindowsSelectorProvider"
+flutter build apk --release
+# 出力: build/app/outputs/flutter-apk/app-release.apk</code></pre>
+    <div class="callout warn">
+      <div class="callout-title">gitignore済み（コミット禁止）</div>
+      android/app/google-services.json / android/signing/release.keystore / android/key.properties
+    </div>
+  </section>
+
+  <!-- ─── 16 ─── -->
+  <section id="s16">
+    <h2><span class="num">16</span>プレミアム機能ゲート</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>機能</th><th>無料</th><th>プレミアム</th></tr></thead>
+      <tbody>
+        <tr><td>テキスト日記</td><td class="check-y">✅</td><td class="check-y">✅</td></tr>
+        <tr><td>AI日記生成</td><td>1回/日</td><td>無制限</td></tr>
+        <tr><td>音声入力</td><td class="check-y">✅</td><td class="check-y">✅</td></tr>
+        <tr><td>写真添付</td><td class="check-n">❌</td><td class="check-y">✅（Voice+Photo以上）</td></tr>
+        <tr><td>カレンダー・タスク連携</td><td class="check-n">❌</td><td class="check-y">✅（Fullプラン）</td></tr>
+        <tr><td>ヘルスデータ連携</td><td class="check-n">❌</td><td class="check-y">✅（Fullプラン）</td></tr>
+        <tr><td>AIパーソナリティ選択</td><td class="check-n">❌</td><td class="check-y">✅（Fullプラン）</td></tr>
+        <tr><td>目標チップ</td><td>3個まで</td><td>6個まで</td></tr>
+        <tr><td>音声ファイル保持</td><td>7日間</td><td>無期限</td></tr>
+        <tr><td>広告</td><td>あり</td><td>なし</td></tr>
+        <tr><td>BYOK（独自APIキー）</td><td class="check-n">❌</td><td class="check-y">✅</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─── 17 ─── -->
+  <section id="s17">
+    <h2><span class="num">17</span>ローカライゼーション</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>言語</th><th>コード</th><th>ARBファイル</th></tr></thead>
+      <tbody>
+        <tr><td>日本語</td><td>ja</td><td><code class="inline">lib/l10n/app_ja.arb</code></td></tr>
+        <tr><td>英語</td><td>en</td><td><code class="inline">lib/l10n/app_en.arb</code></td></tr>
+      </tbody>
+    </table></div>
+    <pre><code>flutter gen-l10n
+# 出力: lib/l10n/generated/app_localizations*.dart</code></pre>
+  </section>
+
+  <!-- ─── APPENDIX ─── -->
+  <section id="appendix">
+    <h2><span class="num">付</span>Play Store情報</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>項目</th><th>値</th></tr></thead>
+      <tbody>
+        <tr><td>アプリ名（JP）</td><td>Tsumug</td></tr>
+        <tr><td>アプリ名（EN）</td><td>AI Voice Journal, Radio</td></tr>
+        <tr><td>カテゴリ</td><td>ライフスタイル</td></tr>
+        <tr><td>プライバシーポリシーURL</td><td><a href="https://3104fsworks.github.io/ai_diary/privacy_policy.html" target="_blank" style="color:var(--accent)">3104fsworks.github.io/ai_diary/privacy_policy.html</a></td></tr>
+        <tr><td>コンテンツレーティング</td><td>全年齢対象</td></tr>
+        <tr><td>最小Androidバージョン</td><td>Android 5.0（API 21）</td></tr>
+        <tr><td>アイコン（512×512）</td><td><code class="inline">assets/icon/play_store_icon_512.png</code></td></tr>
+        <tr><td>フィーチャーグラフィック</td><td><code class="inline">assets/icon/play_store_feature_graphic.png</code></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+</main>
+
+<script>
+  // Active sidebar link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('#sidebar nav a');
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`#sidebar nav a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.2 });
+  sections.forEach(s => obs.observe(s));
+</script>
+
+</body>
+</html>
