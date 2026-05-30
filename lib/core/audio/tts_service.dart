@@ -14,18 +14,28 @@ import '../../data/models/radio_voice_personality.dart';
 ///   energetic female → nova     male → fable  (speed 1.05)
 ///   dj        female → alloy    male → onyx
 ///
-/// TODO(backend): replace inline key with a Cloudflare Workers proxy.
+/// Usage:
+///   Proxy mode (production): set [proxyUrl] to Firebase Functions base URL.
+///     POST ${proxyUrl}/tts  → returns { audioBase64, format }.
+///   BYOK mode: leave [proxyUrl] empty and supply [apiKey].
 class TtsService {
-  TtsService({String? apiKey, http.Client? client})
-      : _apiKey = (apiKey?.isNotEmpty == true) ? apiKey! : _inlineKey,
+  TtsService({
+    String? apiKey,
+    this.proxyUrl = '',
+    this.appToken = '',
+    http.Client? client,
+  })  : _apiKey = (apiKey?.isNotEmpty == true) ? apiKey! : '',
         _client = client ?? http.Client();
 
   final String _apiKey;
-  final http.Client _client;
 
-  // ignore: unused_field
-  static const _inlineKey =
-      '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';
+  /// Firebase Functions (or Cloudflare Workers) base URL, no trailing slash.
+  final String proxyUrl;
+
+  /// Shared secret sent as `X-App-Token` when [proxyUrl] is set.
+  final String appToken;
+
+  final http.Client _client;
 
   static const _endpoint = 'https://api.openai.com/v1/audio/speech';
 
@@ -39,45 +49,77 @@ class TtsService {
     RadioVoiceType voiceType = RadioVoiceType.standard,
     RadioVoiceGender gender = RadioVoiceGender.female,
   }) async {
-    if (_apiKey.isEmpty) throw Exception('TTS: no API key configured.');
+    if (_apiKey.isEmpty && proxyUrl.isEmpty) {
+      throw Exception('TTS: no API key or proxy URL configured.');
+    }
     if (text.isEmpty) throw Exception('TTS: text is empty.');
 
     final voice = _voiceName(voiceType, gender);
     final speed = _speed(voiceType);
+    final ttsBody = jsonEncode({
+      'model': 'tts-1',
+      'input': text,
+      'voice': voice,
+      'response_format': 'mp3',
+      'speed': speed,
+    });
 
-    final res = await _client
-        .post(
-          Uri.parse(_endpoint),
-          headers: {
-            'Authorization': 'Bearer $_apiKey',
-            'Content-Type': 'application/json; charset=utf-8',
-          },
-          body: jsonEncode({
-            'model': 'tts-1',
-            'input': text,
-            'voice': voice,
-            'response_format': 'mp3',
-            'speed': speed,
-          }),
-        )
-        .timeout(const Duration(seconds: 120));
+    if (proxyUrl.isNotEmpty) {
+      // ── Proxy path (Firebase Functions / Cloudflare Workers) ─────────────
+      // Returns { "audioBase64": "<base64 MP3>", "format": "mp3" }
+      final headers = <String, String>{
+        'Content-Type': 'application/json; charset=utf-8',
+      };
+      if (appToken.isNotEmpty) headers['X-App-Token'] = appToken;
 
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      String detail = '';
-      try {
-        final j = jsonDecode(res.body) as Map<String, dynamic>;
-        detail =
-            (j['error'] as Map?)?['message']?.toString() ?? res.body;
-      } catch (_) {
-        detail = res.body;
+      final res = await _client
+          .post(Uri.parse('$proxyUrl/tts'), headers: headers, body: ttsBody)
+          .timeout(const Duration(seconds: 120));
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw Exception('TTS proxy error ${res.statusCode}: ${res.body}');
       }
-      throw Exception('TTS error ${res.statusCode}: $detail');
-    }
 
-    final file = File(destPath);
-    await file.parent.create(recursive: true);
-    await file.writeAsBytes(res.bodyBytes);
-    return destPath;
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      final audioBase64 = json['audioBase64'] as String?;
+      if (audioBase64 == null || audioBase64.isEmpty) {
+        throw Exception('TTS proxy returned no audio data.');
+      }
+
+      final bytes = base64Decode(audioBase64);
+      final file = File(destPath);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes);
+      return destPath;
+    } else {
+      // ── Direct path (BYOK) ────────────────────────────────────────────────
+      final res = await _client
+          .post(
+            Uri.parse(_endpoint),
+            headers: {
+              'Authorization': 'Bearer $_apiKey',
+              'Content-Type': 'application/json; charset=utf-8',
+            },
+            body: ttsBody,
+          )
+          .timeout(const Duration(seconds: 120));
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        String detail = '';
+        try {
+          final j = jsonDecode(res.body) as Map<String, dynamic>;
+          detail = (j['error'] as Map?)?['message']?.toString() ?? res.body;
+        } catch (_) {
+          detail = res.body;
+        }
+        throw Exception('TTS error ${res.statusCode}: $detail');
+      }
+
+      final file = File(destPath);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(res.bodyBytes);
+      return destPath;
+    }
   }
 
   /// Convenience: synthesise to a temp file (for one-off / test usage).

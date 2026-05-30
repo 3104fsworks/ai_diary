@@ -54,3 +54,14 @@ ios/Runner/GoogleService-Info.plist
 build_log.txt
 *.hprof
 android/build/reports/
+
+# Firebase Functions — compiled output and dependencies
+functions/lib/
+functions/node_modules/
+
+# Firebase local state
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log

@@ -175,7 +175,11 @@ class _WeeklyRadioScreenState extends State<WeeklyRadioScreen> {
       final locale = Localizations.localeOf(context).languageCode;
 
       // 1 — Script
-      final scriptSvc = RadioScriptService(apiKey: settings.geminiApiKey);
+      final scriptSvc = RadioScriptService(
+        apiKey: settings.geminiApiKey,
+        proxyUrl: settings.proxyBaseUrl,
+        appToken: settings.appProxyToken,
+      );
       final script = await scriptSvc.generateScript(
         entries,
         locale: locale,
@@ -188,7 +192,11 @@ class _WeeklyRadioScreenState extends State<WeeklyRadioScreen> {
 
       // 2 — TTS
       final audioPath = await RadioEpisodeStore.instance.audioPath(episodeId);
-      final tts = TtsService(apiKey: settings.openAiApiKey);
+      final tts = TtsService(
+        apiKey: settings.openAiApiKey,
+        proxyUrl: settings.proxyBaseUrl,
+        appToken: settings.appProxyToken,
+      );
       await tts.synthesizeTo(
         text: script,
         destPath: audioPath,

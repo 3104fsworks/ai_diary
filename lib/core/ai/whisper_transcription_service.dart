@@ -14,12 +14,10 @@ import 'package:http/http.dart' as http;
 /// With the 2-minute recording cap, worst case is $0.012 per diary entry.
 ///
 /// Setup — choose ONE of the following:
-///   A) Proxy mode (production): set [proxyUrl] to your Cloudflare Workers URL.
-///      The worker holds the real API key; the app never sees it.
-///   B) BYOK mode (beta): leave [proxyUrl] empty and supply [apiKey].
+///   A) Proxy mode (production): set [proxyUrl] to your Firebase Functions URL.
+///      The function holds the real API key; the app never sees it.
+///   B) BYOK mode: leave [proxyUrl] empty and supply [apiKey].
 ///      The key is stored in SharedPreferences on-device.
-///   C) Inline key (dev-only): paste a key into [_inlineKey] below.
-///      Never ship this variant to production.
 class WhisperTranscriptionService {
   final String _apiKey;
 
@@ -38,14 +36,6 @@ class WhisperTranscriptionService {
     this.proxyUrl = '',
     this.appToken = '',
   }) : _apiKey = apiKey;
-
-  // ---------------------------------------------------------------------------
-  // Beta convenience key — replace with your sk-... key for local testing.
-  // NEVER ship this to production; move to a backend proxy before release.
-  // git-ignored via .gitignore (secrets section).
-  // ---------------------------------------------------------------------------
-  // ignore: unused_field
-  static const _inlineKey = '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'; // <-- paste sk-... here for beta testing
 
   static const _directEndpoint =
       'https://api.openai.com/v1/audio/transcriptions';
@@ -75,8 +65,8 @@ class WhisperTranscriptionService {
     required String audioPath,
     required String languageCode,
   }) async {
-    final key = _apiKey.isNotEmpty ? _apiKey : _inlineKey;
-    if (key.isEmpty) return null;
+    if (_apiKey.isEmpty) return null;
+    final key = _apiKey;
 
     try {
       final request = http.MultipartRequest('POST', Uri.parse(_directEndpoint))

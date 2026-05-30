@@ -10,20 +10,34 @@ import '../../data/models/radio_voice_personality.dart';
 ///
 /// Weekly  → ~500 chars (≈ 3 min TTS at natural Japanese speed).
 /// Monthly → ~850 chars (≈ 5 min TTS).
+///
+/// Usage:
+///   Proxy mode (production): set [proxyUrl] to Firebase Functions base URL.
+///     The function holds the real API key; the app never sees it.
+///   BYOK mode: leave [proxyUrl] empty and supply [apiKey].
 class RadioScriptService {
   RadioScriptService({
     String? apiKey,
+    this.proxyUrl = '',
+    this.appToken = '',
     http.Client? client,
-  })  : _apiKey = apiKey?.isNotEmpty == true ? apiKey! : _kSharedKey,
+  })  : _apiKey = apiKey?.isNotEmpty == true ? apiKey! : '',
         _client = client ?? http.Client();
 
   final String _apiKey;
+
+  /// Firebase Functions (or Cloudflare Workers) base URL, no trailing slash.
+  /// Example: https://api-xyz-an.a.run.app
+  final String proxyUrl;
+
+  /// Shared secret sent as `X-App-Token` when [proxyUrl] is set.
+  final String appToken;
+
   final http.Client _client;
 
   static const _base =
       'https://generativelanguage.googleapis.com/v1beta/models';
   static const _model = 'gemini-2.5-flash';
-  static const _kSharedKey = 'AIzaSyA9XpRl6psRNS82ovHdGlrqQY6ssck3E8s';
 
   Future<String> generateScript(
     List<DiaryEntry> entries, {
@@ -43,8 +57,7 @@ class RadioScriptService {
     );
     final user = _userPrompt(entries, locale: locale, episodeType: episodeType);
 
-    final uri = Uri.parse('$_base/$_model:generateContent?key=$_apiKey');
-    final body = jsonEncode({
+    final geminiBody = {
       'systemInstruction': {
         'parts': [
           {'text': system},
@@ -73,15 +86,38 @@ class RadioScriptService {
           'threshold': 'BLOCK_ONLY_HIGH',
         },
       ],
-    });
+    };
 
-    final res = await _client
-        .post(
-          uri,
-          headers: const {'Content-Type': 'application/json; charset=utf-8'},
-          body: body,
-        )
-        .timeout(const Duration(seconds: 40));
+    final http.Response res;
+    if (proxyUrl.isNotEmpty) {
+      // ── Proxy path (Firebase Functions / Cloudflare Workers) ────────────
+      final headers = <String, String>{
+        'Content-Type': 'application/json; charset=utf-8',
+      };
+      if (appToken.isNotEmpty) headers['X-App-Token'] = appToken;
+      res = await _client
+          .post(
+            Uri.parse('$proxyUrl/gemini'),
+            headers: headers,
+            body: jsonEncode({'model': _model, 'body': geminiBody}),
+          )
+          .timeout(const Duration(seconds: 60));
+    } else {
+      // ── Direct path (BYOK) ───────────────────────────────────────────────
+      if (_apiKey.isEmpty) {
+        throw Exception(
+            'RadioScriptService: no API key or proxy URL configured.');
+      }
+      res = await _client
+          .post(
+            Uri.parse('$_base/$_model:generateContent?key=$_apiKey'),
+            headers: const {
+              'Content-Type': 'application/json; charset=utf-8',
+            },
+            body: jsonEncode(geminiBody),
+          )
+          .timeout(const Duration(seconds: 40));
+    }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('Gemini ${res.statusCode}: ${res.body}');

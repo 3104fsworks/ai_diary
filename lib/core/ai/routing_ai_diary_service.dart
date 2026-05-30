@@ -29,21 +29,15 @@ class RoutingAiDiaryService implements AiDiaryService {
   /// report back exactly why we fell back to Mock.
   String? lastErrorMessage;
 
-  /// Developer-owned shared key.
+  /// Developer-owned shared key (BYOK path only).
   ///
-  /// First tries the build-time --dart-define (preferred when CI can inject
-  /// it cleanly), then falls back to the inline beta key so PowerShell quoting
-  /// bugs don't silently downgrade us to Mock.
-  ///
-  /// TODO(beta-end): remove the inline key and move behind a backend proxy
-  /// before public release. The repo is private, but a Gemini key inside an
-  /// APK is still reverse-engineerable.
-  static const _kInlineBetaGeminiKey =
-      'AIzaSyA9XpRl6psRNS82ovHdGlrqQY6ssck3E8s';
+  /// In production the app routes through Firebase Functions (proxyBaseUrl
+  /// set in settings), so no API key is needed in the Flutter binary.
+  /// For local testing, set GEMINI_API_KEY via `--dart-define`.
   String get _sharedApiKey {
     const fromEnv =
         String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
-    return fromEnv.isNotEmpty ? fromEnv : _kInlineBetaGeminiKey;
+    return fromEnv;
   }
 
   @override
@@ -99,7 +93,12 @@ class RoutingAiDiaryService implements AiDiaryService {
     required String localeCode,
     String? voiceTranscript,
   }) async {
-    if (_sharedApiKey.isEmpty) {
+    // Use proxy if configured (production path), or direct key if available
+    // (local dev with --dart-define=GEMINI_API_KEY=...).
+    // Fall back to mock when neither is set.
+    final hasProxy = settings.proxyBaseUrl.isNotEmpty;
+    final hasKey = _sharedApiKey.isNotEmpty;
+    if (!hasProxy && !hasKey) {
       lastOutcome = AiGenerationOutcome.mock;
       return _mock.generateDiary(
         entry: entry,
@@ -109,7 +108,7 @@ class RoutingAiDiaryService implements AiDiaryService {
       );
     }
     return _generateLive(
-      key: _sharedApiKey,
+      key: _sharedApiKey, // empty when proxy handles auth
       entry: entry,
       personality: personality,
       localeCode: localeCode,
