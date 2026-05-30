@@ -2,8 +2,9 @@
  * AI Diary — Cloudflare Workers API Proxy
  *
  * Routes:
- *   POST /whisper  → OpenAI Whisper transcription
- *   POST /gemini   → Google Gemini generateContent
+ *   POST /whisper  → OpenAI Whisper transcription (multipart)
+ *   POST /gemini   → Google Gemini generateContent (JSON)
+ *   POST /tts      → OpenAI TTS → returns { audioBase64, format } (JSON)
  *
  * Secrets (set via `wrangler secret put` — never commit these):
  *   OPENAI_API_KEY   — OpenAI platform API key (sk-proj-...)
@@ -57,6 +58,7 @@ export default {
 
     if (pathname === '/whisper') return handleWhisper(request, env);
     if (pathname === '/gemini') return handleGemini(request, env);
+    if (pathname === '/tts') return handleTts(request, env);
 
     return jsonResponse({ error: 'Not found' }, 404);
   },
@@ -143,6 +145,76 @@ async function handleGemini(request, env) {
       'Content-Type': res.headers.get('Content-Type') ?? 'application/json; charset=utf-8',
     },
   });
+}
+
+// ── /tts ──────────────────────────────────────────────────────────────────────
+// Calls OpenAI TTS, converts the binary MP3 to base64, and returns:
+//   { audioBase64: string, format: "mp3" }
+// The Flutter TtsService decodes this and writes the MP3 to disk.
+//
+// Expected request body (JSON):
+//   { "model": "tts-1", "input": "...", "voice": "nova",
+//     "response_format": "mp3", "speed": 1.0 }
+
+async function handleTts(request, env) {
+  const apiKey = (env.OPENAI_API_KEY ?? '').trim();
+  if (!apiKey) {
+    return jsonResponse({ error: 'OPENAI_API_KEY not configured on server' }, 500);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
+  }
+
+  const {
+    model = 'tts-1',
+    input,
+    voice,
+    response_format: responseFormat = 'mp3',
+    speed = 1.0,
+  } = payload;
+
+  if (!input || !voice) {
+    return jsonResponse({ error: 'Missing "input" or "voice" field' }, 400);
+  }
+
+  const res = await fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model, input, voice, response_format: responseFormat, speed }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    return jsonResponse({ error: `OpenAI TTS ${res.status}: ${errText}` }, res.status);
+  }
+
+  // Convert binary MP3 to base64 using Cloudflare Workers' btoa + Uint8Array
+  const arrayBuffer = await res.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  // btoa only handles latin-1; build a binary string first
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const audioBase64 = btoa(binary);
+
+  return new Response(
+    JSON.stringify({ audioBase64, format: responseFormat }),
+    {
+      status: 200,
+      headers: {
+        ...CORS_HEADERS,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+    },
+  );
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
