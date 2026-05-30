@@ -360,14 +360,70 @@ onboardingDone = true  → /home
   （同じBody）
 ```
 
+### 7-1.5. 初回限定フル機能体験期間（オンボーディング施策）
+
+> [!tip] 14日間トライアル
+> **仕様**: 初回のオンボーディング完了（チュートリアル完了）から**14日間**は、RevenueCatの契約状態に関わらず全ユーザーに「プレミアム（Fullプラン）」の全機能を解放する。
+>
+> **目的**: AIラジオ・ライフログ連携など、アプリの最大価値を体験してもらい、納得して課金へ移行してもらう。**目標CVR: 3〜5%**
+
+#### 実装
+
+| 項目 | 詳細 |
+|---|---|
+| 開始トリガー | `TutorialScreen._completeOnboarding()` → `settings.recordFirstLaunchDate()` |
+| 期間 | `firstLaunchDate` から14日間 |
+| 判定 | `AppSettings.isInTrialPeriod` → `isPremium` に含まれる |
+| 体験期間終了後 | 無課金なら `isPremium = false` → `PremiumUpsellSheet` を表示 |
+
+```dart
+// AppSettings.isPremium の判定ロジック
+bool get isPremium {
+  if (isInTrialPeriod) return true; // 14-day trial
+  if (_manualPremium) return true;  // RevenueCat同期
+  if (lifetimeFree) return true;    // 招待コード（永久）
+  final until = premiumUntil;
+  if (until != null && until.isAfter(DateTime.now())) return true;
+  return false;
+}
+
+bool get isInTrialPeriod {
+  final launched = firstLaunchDate;
+  if (launched == null) return false;
+  return DateTime.now().difference(launched).inDays < 14;
+}
+```
+
+---
+
 ### 7-2. AI日記生成（APIキー優先度）
 
 ```
 優先度 1: BYOK（ユーザー入力 Gemini APIキー）→ 無制限・選択パーソナリティ
-優先度 2: Premium → 共有キー
-優先度 3: Free → 共有キー、1日1回制限、パーソナリティ強制Standard
+優先度 2: Premium（トライアル含む） → 共有キー・選択パーソナリティ
+優先度 3: Free → 共有キー、週3回制限、パーソナリティ強制Standard
           ↓ 失敗時 → MockAiDiaryService（フォールバック）
 ```
+
+#### 無料プランのAI生成回数制限（週3回ルール）
+
+> [!warning] 制限変更（旧: 1日1回 → 新: 週3回まで）
+
+- **制限ロジック**: 過去7日間（ローリングウィンドウ）のAI生成回数が3回に達したらブロック。
+- **`FreeQuotaExceeded`** 例外が投げられると UI が `PremiumUpsellSheet` を表示。
+- **手入力の日記作成は無制限**（AI生成のみカウント）。
+
+```dart
+// RoutingAiDiaryService（自動フォールバック）
+if (settings.freeGenerationExceededThisWeek) {
+  throw const FreeQuotaExceeded();
+}
+```
+
+| SharedPreferences キー | 旧 | 新 |
+|---|---|---|
+| `last_free_generation_date` | 最終生成日（1日1回用） | 廃止（後方互換のため残存） |
+| `free_generation_dates_list` | — | 過去7日間の生成日時JSON配列 |
 
 ### 7-3. Gemini パラメータ
 
@@ -411,6 +467,26 @@ onboardingDone = true  → /home
 週間: 毎週日曜 21:00（目標180秒）
 月間: 毎月末日 21:00（目標300秒）
 ```
+
+### 7-6.5. PremiumUpsellSheet（体験期間終了モーダル）
+
+`lib/widgets/premium_upsell_sheet.dart` — `PremiumUpsellSheet.show(context)` で表示。
+
+**表示トリガー:**
+- ラジオ画面でユーザーが生成を試みたとき（`settings.isPremium == false`）
+- 日記編集画面で週3回の無料AI生成枠を超えたとき（`FreeQuotaExceeded`）
+
+**UI構成:**
+
+| 要素 | 内容 |
+|---|---|
+| ビジュアル | ラジオプレイヤー風グラフィック（電波アーク + 鍵マーク + Premiumバッジ） |
+| メインコピー | 「今週も、あなただけの『AIラジオ』の準備ができています。」 |
+| 本文 | 14日間体験終了の説明 + プレミアム移行の訴求 |
+| プライマリCTA | 「プランを選んで、今週のラジオを聴く」→ `/settings/plan` へ遷移 |
+| セカンダリリンク | 「無料プラン（AIラジオなし・AI生成週3回）で続ける」→ シートを閉じる |
+
+---
 
 ### 7-7. タイムカプセル機能
 
@@ -668,7 +744,9 @@ tags: []
 | `is_premium` | bool | `false` | RevenueCat同期プレミアムフラグ |
 | `lifetime_free` | bool | `false` | 招待コード永久フラグ |
 | `premium_until_iso` | String | null | 期限付きプレミアム期限 |
-| `last_free_generation_date` | String | null | 無料生成最終利用日 |
+| `first_launch_date` | String | null | 初回オンボーディング完了日時（ISO 8601）。14日間トライアル起算点。 |
+| `free_generation_dates_list` | String | `"[]"` | 無料AI生成日時のJSON配列（7日超は自動削除）。週3回制限の管理用。 |
+| `last_free_generation_date` | String | null | **廃止済み**（旧1日1回管理キー。後方互換のため残存） |
 | `diary_reminder_enabled` | bool | `false` | 日記リマインダー有効 |
 | `diary_reminder_hour` | int | `21` | リマインダー時刻（0-23） |
 | `radio_notifications_enabled` | bool | `true` | ラジオ通知有効 |
@@ -728,8 +806,9 @@ flutter build apk --release
 | 機能 | 無料 | プレミアム |
 |---|---|---|
 | テキスト日記 | ✅ | ✅ |
-| AI日記生成 | 1回/日 | 無制限 |
+| AI日記生成 | **週3回まで** | 無制限 |
 | 音声入力 | ✅ | ✅ |
+| AIラジオ生成 | ❌（体験期間中のみ） | ✅ 週・月 |
 | 写真添付 | ❌ | ✅（Voice+Photo以上） |
 | カレンダー・タスク連携 | ❌ | ✅（Fullプラン） |
 | ヘルスデータ連携 | ❌ | ✅（Fullプラン） |
@@ -739,6 +818,9 @@ flutter build apk --release
 | 音声ファイル保持 | 7日間 | 無期限 |
 | 広告 | あり | なし |
 | BYOK（独自APIキー） | ❌ | ✅ |
+
+> [!note] 初回14日間トライアル
+> トライアル中は全機能が無制限で利用可能（AIラジオ含む）。体験期間終了後は上記テーブルに従う。
 
 ---
 

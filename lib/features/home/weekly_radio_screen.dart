@@ -11,6 +11,7 @@ import '../../data/models/radio_episode.dart';
 import '../../data/sources/local/radio_episode_store.dart';
 import '../../features/diary/widgets/particle_orb.dart';
 import '../../l10n/generated/app_localizations.dart';
+import '../../widgets/premium_upsell_sheet.dart';
 import '../../widgets/app_loading.dart';
 import 'radio_player_screen.dart';
 
@@ -141,6 +142,18 @@ class _WeeklyRadioScreenState extends State<WeeklyRadioScreen> {
     } catch (_) {}
   }
 
+  // ── Premium gate ──────────────────────────────────────────────────────
+
+  /// Returns true when the user may proceed. Shows [PremiumUpsellSheet] and
+  /// returns false when the trial is over and no paid plan is active.
+  Future<bool> _checkPremiumOrUpsell() async {
+    if (!mounted) return false;
+    final settings = AppSettingsScope.of(context);
+    if (settings.isPremium) return true;
+    await PremiumUpsellSheet.show(context);
+    return false;
+  }
+
   // ── Episode generation ────────────────────────────────────────────────
 
   Future<void> _startGeneration({
@@ -149,6 +162,8 @@ class _WeeklyRadioScreenState extends State<WeeklyRadioScreen> {
     required List<DiaryEntry> entries,
   }) async {
     if (_generatingId != null) return; // already generating
+    if (!await _checkPremiumOrUpsell()) return; // trial over / not paid
+    if (!mounted) return;
     if (entries.isEmpty) {
       _showSnack('日記を書いてから生成できます');
       return;

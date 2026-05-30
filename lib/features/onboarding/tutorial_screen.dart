@@ -25,7 +25,9 @@ class _TutorialScreenState extends State<TutorialScreen> {
   }
 
   void _completeOnboarding() {
-    AppSettingsScope.of(context).setOnboardingDone(true);
+    final settings = AppSettingsScope.of(context);
+    settings.recordFirstLaunchDate(); // Starts the 14-day free full-feature trial.
+    settings.setOnboardingDone(true);
     context.go(AppRoutes.home);
   }
 

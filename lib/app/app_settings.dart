@@ -39,6 +39,8 @@ class AppSettings extends ChangeNotifier {
   static const _kDiaryReminderHour = 'diary_reminder_hour';
   static const _kProxyBaseUrl = 'proxy_base_url';
   static const _kAppProxyToken = 'app_proxy_token';
+  static const _kFirstLaunchDate = 'first_launch_date';
+  static const _kFreeGenerationDatesList = 'free_generation_dates_list';
 
   final SharedPreferences _prefs;
 
@@ -150,8 +152,47 @@ class AppSettings extends ChangeNotifier {
   /// Code the user has already redeemed (so they can't redeem twice).
   String? get redeemedCode => _prefs.getString(_kRedeemedCode);
 
-  /// Effective premium status, combining all sources.
+  // ── Trial period ─────────────────────────────────────────────────────────
+
+  /// ISO 8601 timestamp of when onboarding was first completed.
+  /// Null before the user finishes the tutorial for the first time.
+  DateTime? get firstLaunchDate {
+    final raw = _prefs.getString(_kFirstLaunchDate);
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  /// True during the 14-day free full-feature trial that starts on
+  /// the first onboarding completion.
+  bool get isInTrialPeriod {
+    final launched = firstLaunchDate;
+    if (launched == null) return false;
+    return DateTime.now().difference(launched).inDays < 14;
+  }
+
+  /// Calendar days remaining in the trial (0 if expired or not started).
+  int get trialDaysRemaining {
+    final launched = firstLaunchDate;
+    if (launched == null) return 0;
+    final remaining = 14 - DateTime.now().difference(launched).inDays;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  /// Records the trial-start date the first time the user completes onboarding.
+  /// Subsequent calls are no-ops so the trial window never resets.
+  Future<void> recordFirstLaunchDate() async {
+    if (_prefs.containsKey(_kFirstLaunchDate)) return;
+    await _prefs.setString(
+        _kFirstLaunchDate, DateTime.now().toIso8601String());
+    notifyListeners();
+  }
+
+  // ── Premium status ────────────────────────────────────────────────────────
+
+  /// Effective premium status combining all sources:
+  /// trial period, paid subscription, lifetime invite, timed invite.
   bool get isPremium {
+    if (isInTrialPeriod) return true; // 14-day onboarding trial
     if (_manualPremium) return true;
     if (lifetimeFree) return true;
     final until = premiumUntil;
@@ -159,22 +200,75 @@ class AppSettings extends ChangeNotifier {
     return false;
   }
 
-  /// Returns true if the free user has already used today's single AI
-  /// generation. Premium users / BYOK users bypass this check.
-  bool get freeGenerationUsedToday {
-    final raw = _prefs.getString(_kLastFreeGenerationDate);
-    if (raw == null) return false;
-    final today = _ymd(DateTime.now());
-    return raw == today;
+  /// True only when the user holds an active *paid* subscription or invite.
+  /// Does NOT include the free trial. Use this to decide whether to show
+  /// the upsell sheet (trial over, not yet paying).
+  bool get isPremiumPaid {
+    if (_manualPremium) return true;
+    if (lifetimeFree) return true;
+    final until = premiumUntil;
+    if (until != null && until.isAfter(DateTime.now())) return true;
+    return false;
   }
 
+  // ── Free-tier AI generation quota (weekly) ────────────────────────────────
+
+  /// Returns true when a free user has used all 3 AI generations allowed
+  /// in the rolling 7-day window.
+  bool get freeGenerationExceededThisWeek {
+    final list = _recentGenerationDates();
+    return list.length >= 3;
+  }
+
+  /// Number of free AI generations still available this week (0–3).
+  int get freeGenerationsRemainingThisWeek {
+    return (3 - _recentGenerationDates().length).clamp(0, 3);
+  }
+
+  /// Dates (within the past 7 days) on which a free generation was used.
+  List<DateTime> _recentGenerationDates() {
+    final raw = _prefs.getString(_kFreeGenerationDatesList);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = (jsonDecode(raw) as List).cast<String>();
+      final cutoff = DateTime.now().subtract(const Duration(days: 7));
+      return list
+          .map((s) => DateTime.tryParse(s))
+          .whereType<DateTime>()
+          .where((d) => d.isAfter(cutoff))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Records that a free AI generation was used right now.
+  /// Also prunes entries older than 7 days to keep storage tidy.
   Future<void> markFreeGenerationUsed() async {
-    await _prefs.setString(_kLastFreeGenerationDate, _ymd(DateTime.now()));
+    List<String> stored = [];
+    final raw = _prefs.getString(_kFreeGenerationDatesList);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        stored = (jsonDecode(raw) as List).cast<String>();
+      } catch (_) {}
+    }
+    stored.add(DateTime.now().toIso8601String());
+    // Prune entries older than 7 days
+    final cutoff = DateTime.now().subtract(const Duration(days: 7));
+    stored = stored
+        .where((s) {
+          final d = DateTime.tryParse(s);
+          return d != null && d.isAfter(cutoff);
+        })
+        .toList();
+    await _prefs.setString(_kFreeGenerationDatesList, jsonEncode(stored));
     notifyListeners();
   }
 
-  String _ymd(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  // Legacy key kept for graceful migration — no longer written.
+  // ignore: unused_element
+  String get _legacyLastFreeGenerationDate =>
+      _prefs.getString(_kLastFreeGenerationDate) ?? '';
 
   /// Gemini API key — empty string when not configured.
   String get geminiApiKey => _prefs.getString(_kGeminiApiKey) ?? '';

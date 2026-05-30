@@ -14,8 +14,8 @@ import 'mock_ai_diary_service.dart';
 /// (*) The "shared API" path uses the same Gemini service for now. When the
 ///     real shared backend ships, swap the `_sharedApiKey` source.
 ///
-/// Throws [FreeQuotaExceeded] when a free user has already used today's
-/// single generation. The UI catches this and shows the upgrade prompt.
+/// Throws [FreeQuotaExceeded] when a free user has used all 3 weekly AI
+/// generations. The UI catches this and shows the premium upsell sheet.
 class RoutingAiDiaryService implements AiDiaryService {
   RoutingAiDiaryService({required this.settings})
       : _mock = MockAiDiaryService();
@@ -79,8 +79,8 @@ class RoutingAiDiaryService implements AiDiaryService {
       );
     }
 
-    // Free: 1/day, personality forced to Standard.
-    if (settings.freeGenerationUsedToday) {
+    // Free: 3 times per rolling 7-day window, personality forced to Standard.
+    if (settings.freeGenerationExceededThisWeek) {
       throw const FreeQuotaExceeded();
     }
     final result = await _generateSharedOrMock(
@@ -156,7 +156,8 @@ class RoutingAiDiaryService implements AiDiaryService {
 
 enum AiGenerationOutcome { live, mock, fallback }
 
-/// Thrown when a free user has already used their daily generation.
+/// Thrown when a free user has used all 3 AI generations in the rolling
+/// 7-day window.
 class FreeQuotaExceeded implements Exception {
   const FreeQuotaExceeded();
 }

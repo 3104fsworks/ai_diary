@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../app/app_settings.dart';
-import '../../app/router/app_router.dart';
 import '../../app/service_locator.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/ai/ai_diary_service.dart';
@@ -22,6 +21,7 @@ import 'widgets/goal_grid.dart';
 import 'widgets/particle_orb.dart';
 import 'widgets/sns_image_card.dart';
 import '../../core/notifications/time_capsule_service.dart';
+import '../../widgets/premium_upsell_sheet.dart';
 import 'widgets/voice_tooltip.dart';
 
 class DiaryEditScreen extends StatefulWidget {
@@ -428,31 +428,10 @@ class _DiaryEditScreenState extends State<DiaryEditScreen> {
     }
   }
 
-  Future<void> _showUpgradeDialog() async {
-    final l = AppLocalizations.of(context);
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(l.quotaTitle),
-          content: Text(l.quotaBody),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(l.quotaLater),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                context.push(AppRoutes.plan);
-              },
-              child: Text(l.quotaUpgrade),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  /// Shows the premium upsell bottom sheet (replaces the old AlertDialog).
+  /// Triggered when a free user exceeds their weekly AI-generation quota.
+  Future<void> _showUpgradeDialog() =>
+      PremiumUpsellSheet.show(context);
 
   DiaryEntry _draftSnapshot() {
     final today = DateTime.now();
