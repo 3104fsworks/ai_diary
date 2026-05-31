@@ -1,15 +1,17 @@
-# AI Diary — Cloudflare Workers proxy configuration
+# Shared Cloudflare Workers proxy
+# Used by: AI Diary (ai_diary) / Voice Brain (voice_brain)
 #
 # Quick-start:
-#   1. npm install -g wrangler
+#   1. cd cloudflare
 #   2. wrangler login
 #   3. wrangler secret put OPENAI_API_KEY   # paste sk-proj-...
 #   4. wrangler secret put GEMINI_API_KEY   # paste AIzaSy...
 #   5. wrangler secret put APP_TOKEN        # any random 32+ char string
 #   6. wrangler deploy
 #
-# Your worker URL: https://ai-diary-proxy.<subdomain>.workers.dev
-# Enter it in the app: カスタム設定 → プロキシ設定 → プロキシURL
+# Worker URL: https://ai-diary-proxy.<subdomain>.workers.dev
+# AI Diary  → カスタム設定 → プロキシ設定 → プロキシURL に入力
+# Voice Brain → proxyBaseUrl に同じ URL を設定
 
 name            = "ai-diary-proxy"
 main            = "worker.js"

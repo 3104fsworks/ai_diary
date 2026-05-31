@@ -1,29 +1,25 @@
 /**
- * AI Diary — Cloudflare Workers API Proxy
+ * Shared Cloudflare Workers API Proxy
+ * Used by: AI Diary (ai_diary) / Voice Brain (voice_brain)
  *
  * Routes:
- *   POST /whisper  → OpenAI Whisper transcription (multipart)
- *   POST /gemini   → Google Gemini generateContent (JSON)
- *   POST /tts      → OpenAI TTS → returns { audioBase64, format } (JSON)
+ *   POST /whisper              → OpenAI Whisper transcription (multipart)
+ *   POST /gemini               → Google Gemini generateContent (JSON)
+ *   POST /tts                  → OpenAI TTS → { audioBase64, format }
+ *   POST /voice-brain/process  → Gemini audio→JSON (Voice Brain)
  *
  * Secrets (set via `wrangler secret put` — never commit these):
  *   OPENAI_API_KEY   — OpenAI platform API key (sk-proj-...)
  *   GEMINI_API_KEY   — Google AI Studio API key (AIzaSy...)
- *   APP_TOKEN        — Shared secret the app sends as X-App-Token header.
- *                      Set to any random 32+ char string. Leave unset / empty
- *                      to disable token validation during local dev.
+ *   APP_TOKEN        — Shared secret sent as X-App-Token header.
+ *                      Leave unset to skip validation during local dev.
  *
  * Deploy:
- *   npm install -g wrangler
- *   wrangler login
+ *   cd cloudflare
  *   wrangler secret put OPENAI_API_KEY
  *   wrangler secret put GEMINI_API_KEY
  *   wrangler secret put APP_TOKEN
  *   wrangler deploy
- *
- * The worker URL will be something like:
- *   https://ai-diary-proxy.<your-subdomain>.workers.dev
- * Enter that URL in the app under カスタム設定 → プロキシ設定.
  */
 
 const CORS_HEADERS = {
@@ -59,6 +55,7 @@ export default {
     if (pathname === '/whisper') return handleWhisper(request, env);
     if (pathname === '/gemini') return handleGemini(request, env);
     if (pathname === '/tts') return handleTts(request, env);
+    if (pathname === '/voice-brain/process') return handleVoiceBrainProcess(request, env);
 
     return jsonResponse({ error: 'Not found' }, 404);
   },
@@ -215,6 +212,116 @@ async function handleTts(request, env) {
       },
     },
   );
+}
+
+// ── /voice-brain/process ──────────────────────────────────────────────────────
+//
+// Sends an audio file (base64) + category to Gemini 2.0 Flash, which
+// transcribes and structures the content in a single pass (no Whisper needed).
+//
+// Request body (JSON):
+//   {
+//     "audioBase64": "<base64-encoded audio>",
+//     "mimeType":    "audio/m4a",      // or audio/mp4, audio/wav, audio/webm
+//     "category":    "アイデア"        // see CATEGORY_HINTS below
+//   }
+//
+// Response (JSON):
+//   {
+//     "transcript": "音声の逐語テキスト",
+//     "title":      "20文字以内のタイトル",
+//     "body":       "整理・清書した本文",
+//     "tags":       ["タグ1", "タグ2", "タグ3"],
+//     "category":   "アイデア"
+//   }
+
+const CATEGORY_HINTS = {
+  'アイデア':  'アイデア・着想・インスピレーション',
+  'タスク':    'タスク・やること・TODO',
+  'メモ':      'メモ・覚え書き・情報',
+  '学習':      '学んだこと・気づき・読書メモ',
+  '会議':      '会議・打ち合わせ・議事録',
+  '振り返り':  '振り返り・リフレクション・感想',
+};
+
+async function handleVoiceBrainProcess(request, env) {
+  const apiKey = (env.GEMINI_API_KEY ?? '').trim();
+  if (!apiKey) {
+    return jsonResponse({ error: 'GEMINI_API_KEY not configured on server' }, 500);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
+  }
+
+  const { audioBase64, mimeType = 'audio/m4a', category = 'メモ' } = payload;
+  if (!audioBase64 || typeof audioBase64 !== 'string') {
+    return jsonResponse({ error: 'Missing or invalid "audioBase64" field' }, 400);
+  }
+
+  const categoryLabel = CATEGORY_HINTS[category] ?? category;
+  const prompt =
+    `この音声を文字起こしして「${categoryLabel}」として整理してください。\n\n` +
+    '以下の4フィールドをもつJSONだけを返すこと（コードブロック・説明文は不要）:\n' +
+    '{\n' +
+    '  "transcript": "音声の逐語テキスト",\n' +
+    '  "title": "内容を表すタイトル（20字以内）",\n' +
+    '  "body": "話し言葉を整理した読みやすい本文（言い淀み・繰り返し除去）",\n' +
+    '  "tags": ["キーワード1", "キーワード2", "キーワード3"]\n' +
+    '}\n\n' +
+    'tagsは3〜5個の短い日本語キーワードで。';
+
+  const geminiBody = {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          // Inline audio — Gemini 2.0 Flash natively understands audio
+          { inlineData: { mimeType, data: audioBase64 } },
+          { text: prompt },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 1024,
+      responseMimeType: 'application/json', // forces valid JSON output
+    },
+  };
+
+  const model = 'gemini-2.0-flash';
+  const geminiUrl =
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const res = await fetch(geminiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify(geminiBody),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    return jsonResponse({ error: `Gemini ${res.status}: ${errText}` }, res.status);
+  }
+
+  const geminiResp = await res.json();
+  const rawText = geminiResp?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+
+  let result;
+  try {
+    result = JSON.parse(rawText);
+  } catch {
+    // Gemini returned something non-JSON — wrap it gracefully
+    result = { transcript: rawText, title: '', body: rawText, tags: [] };
+  }
+
+  // Always echo the requested category back to the client
+  result.category = category;
+
+  return jsonResponse(result);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
