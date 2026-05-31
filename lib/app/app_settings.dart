@@ -430,15 +430,35 @@ class AppSettings extends ChangeNotifier {
       _prefs.getInt(_kDiaryReminderHour) ?? 21;
 
   // ── Proxy settings ───────────────────────────────────────────────────────
+  //
+  // Developer-controlled — users never configure these.
+  //
+  // PROXY_BASE_URL is hardcoded here (it's not a secret; it's a public endpoint).
+  // APP_TOKEN is injected at build time via --dart-define=APP_TOKEN=xxx
+  // so it never appears in source code committed to git.
+  //
+  // Build commands:
+  //   flutter run     --dart-define=APP_TOKEN=<token>
+  //   flutter build apk --release --dart-define=APP_TOKEN=<token>
 
-  /// Base URL of the Cloudflare Workers proxy (no trailing slash).
-  /// Empty string = direct API calls (beta mode).
-  /// Example: https://ai-diary-proxy.you.workers.dev
-  String get proxyBaseUrl => _prefs.getString(_kProxyBaseUrl) ?? '';
+  static const _kBuiltInProxyUrl =
+      'https://ai-diary-proxy.3104-fs-works.workers.dev';
+  static const _kBuiltInAppToken =
+      String.fromEnvironment('APP_TOKEN', defaultValue: '');
 
-  /// Shared secret sent as X-App-Token when the proxy has APP_TOKEN set.
-  /// Empty string = no token header is sent.
-  String get appProxyToken => _prefs.getString(_kAppProxyToken) ?? '';
+  /// Always returns the built-in Cloudflare Workers URL.
+  /// Falls back to any value stored in SharedPreferences (legacy / dev override).
+  String get proxyBaseUrl {
+    if (_kBuiltInProxyUrl.isNotEmpty) return _kBuiltInProxyUrl;
+    return _prefs.getString(_kProxyBaseUrl) ?? '';
+  }
+
+  /// Returns the APP_TOKEN injected at build time.
+  /// Falls back to SharedPreferences override (useful for local dev without --dart-define).
+  String get appProxyToken {
+    if (_kBuiltInAppToken.isNotEmpty) return _kBuiltInAppToken;
+    return _prefs.getString(_kAppProxyToken) ?? '';
+  }
 
   Future<void> setRadioVoiceType(RadioVoiceType type) async {
     await _prefs.setString(_kRadioVoiceType, type.storageKey);
